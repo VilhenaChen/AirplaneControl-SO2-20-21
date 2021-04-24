@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{5d216e76-5350-4023-bd17-a7cbdbea7aab}</ProjectGuid>
-    <RootNamespace>TP</RootNamespace>
+    <ProjectGuid>{86fffa2c-b78c-4233-9028-11ffa9077fdf}</ProjectGuid>
+    <RootNamespace>Aviao</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -139,10 +139,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="control.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="estruturas.h" />
+    <ClCompile Include="aviao.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
