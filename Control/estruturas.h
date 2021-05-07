@@ -23,3 +23,8 @@ typedef struct {
 	struct_aeroporto* origem;
 	struct_aeroporto* destino;
 } struct_aviao;
+
+typedef struct {
+	struct_aeroporto* aeroportos;
+	struct_aviao* avioes;
+} struct_dados;

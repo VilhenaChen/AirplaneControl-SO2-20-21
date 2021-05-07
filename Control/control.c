@@ -6,7 +6,10 @@
 #include <io.h>
 #include "estruturas.h"
 
-void menu();
+
+//Declaracao de Funcoes e Threads
+DWORD WINAPI Menu(LPVOID param);
+
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -31,7 +34,9 @@ int _tmain(int argc, TCHAR* argv[]) {
 	return 0;
 }
 
-void menu() {
+
+//Codigo de Funcoes e Threads
+DWORD WINAPI Menu(LPVOID param) {
 	TCHAR com_total[TAM];
 	TCHAR com[TAM], arg1[TAM],arg2[TAM],arg3[TAM];
 	int cont;
