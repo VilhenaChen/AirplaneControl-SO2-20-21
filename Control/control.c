@@ -5,12 +5,13 @@
 #include <fcntl.h>
 #include <io.h>
 #include "estruturas.h"
-#define NTHREADS 1
+#define NTHREADS 2
 
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Menu(LPVOID param);
-//DWORD WINAPI Comunicacao(LPVOID param);
+DWORD WINAPI Comunicacao(LPVOID param);
+void RespondeAoAviao(struct_dados* dados, int id_aviao, struct_controlador_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void Lista(struct_dados* dados);
 
@@ -30,6 +31,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	TCHAR nome_chave[TAM] = TEXT("SOFTWARE\\TEMP\\TP_SO2"), nome_par_avioes[TAM] = TEXT("maxAvioes"),nome_par_aeroportos[TAM] = TEXT("maxAeroportos");
 	DWORD par_valor_avioes = 10, par_valor_aeroportos = 10;
 
+
 	
 	dados.n_aeroportos_atuais = 0;
 	
@@ -39,7 +41,12 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Já existe uma instância deste programa a correr!\n"));
 		return -1; // quit; mutex is released automatically
 	}
-	
+
+	dados.mutex_comunicacao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
+	if (dados.mutex_comunicacao == NULL) {
+		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
+		return -1;
+	}
 
 	//Criacao da Key onde serao guardados o max de avioes e Aeroportos
 	if (RegCreateKeyEx(HKEY_CURRENT_USER,
@@ -91,35 +98,17 @@ int _tmain(int argc, TCHAR* argv[]) {
 		return -1;
 	}
 
-	//Criacao dos semaforos
-	/*semafAvioes = CreateSemaphore(NULL, 0, TAM, SEMAFORO_AVIOES);
-	if (semafAvioes == NULL) {
-		_tprintf(_T("Erro ao criar o semáforo Avioes!\n"));
-		return -1;
-	}
-	semafVazios = CreateSemaphore(NULL, TAM, TAM, SEMAFORO_VAZIOS);
-	if (semafVazios == NULL) {
-		_tprintf(_T("Erro ao criar o semáforo Vazios!\n"));
-		return -1;
-	}
-	*/
-	/*mutexControl = CreateMutex(NULL, FALSE, MUTEX_CONTROLADOR);
-	if (mutexControl == NULL) {
-		_tprintf(_T("Erro ao criar o mutex do produtor!\n"));
-		return -1;
-	}*/
-
 	//Criacao das Threads
 	hthreads[0] = CreateThread(NULL, 0, Menu, &dados, 0, NULL);
 	if (hthreads[0] == NULL) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
 		return -1; 
 	}
-	/*hthreads[1] = CreateThread(NULL, 0, Comunicacao, &dados, 0, NULL);
+	hthreads[1] = CreateThread(NULL, 0, Comunicacao, &dados, 0, NULL);
 	if (hthreads[0] == NULL) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
 		return -1; 
-	}*/
+	}
 
 	WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
 
@@ -191,16 +180,64 @@ DWORD WINAPI Menu(LPVOID param) {
 }
 
 
-/*DWORD WINAPI Comunicacao(LPVOID param) {
-	int id_aviao;
+DWORD WINAPI Comunicacao(LPVOID param) {
+	int id_aviao = 0;
 	struct_dados* dados = (struct_dados*) param;
-	struct_memoria_particular* ptrMemoriaParticular;
-	HANDLE objMapParticular;
-	struct_aviao_com comunicacao_particular;
+	struct_memoria_geral* ptrMemoriaGeral;
+	HANDLE objMapGeral;
+	struct_controlador_com comunicacaoGeral;
+	HANDLE semafEscritos, semafLidos;
 	//Lê da memoria partilhada geral
 
-	//Responde a cada aviao atraves da memoria partilhada particular
-	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0,sizeof(struct_memoria_particular),(MEMORIA_AVIAO,id_aviao));
+	//Criacao dos semaforos
+	semafEscritos = CreateSemaphore(NULL, 0, MAX_AVIOES, SEMAFORO_AVIOES);
+	if (semafEscritos == NULL) {
+		_tprintf(_T("Erro ao criar o semáforo dos escritos!\n"));
+		return -1;
+	}
+	semafLidos = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_VAZIOS);
+	if (semafLidos == NULL) {
+		_tprintf(_T("Erro ao criar o semáforo dos lidos!\n"));
+		return -1;
+	}
+	
+	objMapGeral = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
+	//Verificar se nao e NULL
+	if (objMapGeral == NULL) {
+		_tprintf(_T("Erro ao criar o File Mapping Geral!\n"));
+		return -1;
+	}
+	ptrMemoriaGeral = (struct_memoria_geral*)MapViewOfFile(objMapGeral, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
+	if (ptrMemoriaGeral == NULL) {
+		_tprintf(_T("Erro ao criar o ptrMemoria Geral!\n"));
+		return -1;
+	}
+
+	ptrMemoriaGeral->in = 0;
+	ptrMemoriaGeral->out = 0;
+	ptrMemoriaGeral->nrAvioes = 0;
+
+	ReleaseMutex(dados->mutex_comunicacao);
+
+	while (TRUE) {
+		WaitForSingleObject(semafEscritos, INFINITE);
+		CopyMemory(&comunicacaoGeral, &ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->out], sizeof(struct_controlador_com));
+		ptrMemoriaGeral->out = (ptrMemoriaGeral->out + 1) % MAX_AVIOES;
+		ReleaseSemaphore(semafLidos, 1, NULL);
+		RespondeAoAviao(dados,id_aviao,&comunicacaoGeral);
+	}
+
+	return 0;
+}
+
+//Codigo de Funcoes
+
+void RespondeAoAviao(struct_dados* dados, int id_aviao, struct_controlador_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
+	HANDLE objMapParticular, mutexParticular;
+	struct_memoria_particular* ptrMemoriaParticular;
+	struct_aviao_com comunicacaoParticular;
+
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), (MEMORIA_AVIAO, id_aviao));
 	//Verificar se nao e NULL
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
@@ -209,17 +246,20 @@ DWORD WINAPI Menu(LPVOID param) {
 
 	ptrMemoriaParticular = (struct_memoria_particular*)MapViewOfFile(objMapParticular, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
 	if (ptrMemoriaParticular == NULL) {
-		_tprintf(_T("Erro ao criar o ptrMemoriaParicular!\n"));
+		_tprintf(_T("Erro ao criar o ptrMemoria Paricular!\n"));
 		return -1;
 	}
 
 	// colocar em comunicacao particular o que é pretendido enviar
-	WaitForSingleObject(&dados->avioes[id_aviao].mutex, INFINITE);
-	CopyMemory(&ptrMemoriaParticular->aviao,&comunicacao_particular,sizeof(struct_aviao_com));
-	ReleaseMutex(&dados->avioes[id_aviao].mutex);
-}*/
-
-//Codigo de Funcoes
+	mutexParticular = CreateMutex(NULL, FALSE, (MUTEX_AVIAO, id_aviao));
+	if (mutexParticular == NULL) {
+		_tprintf(_T("Erro ao criar o mutex do aviao!\n"));
+		return -1;
+	}
+	WaitForSingleObject(mutexParticular, INFINITE);
+	CopyMemory(&ptrMemoriaParticular->aviao, &comunicacaoParticular, sizeof(struct_aviao_com));
+	ReleaseMutex(mutexParticular);
+}
 
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados) {
 	if (dados->n_aeroportos_atuais < MAX_AEROPORTOS) {

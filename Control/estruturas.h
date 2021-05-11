@@ -5,16 +5,36 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <io.h>
+
+//DEFINES TAMANHOS E MAXMOS
 #define TAM 200
 #define TAM_MAP 1000
 #define MAX_AVIOES 10
 #define MAX_AEROPORTOS 2
+
+//DEFINES PARA NOMES DE MUTEXES, SEMAFOROS, ETC.
 #define MEMORIA_CONTROL _T("Memoria Control")
-#define MEMORIA_AVIAO _T("Memoria avião %d")
+#define MEMORIA_AVIAO _T("Memoria aviao %d")
 #define MUTEX_AVIAO _T("Mutex do Aviao %d")
 #define SEMAFORO_AVIOES _T("Semaforo dos Avioes")
 #define SEMAFORO_VAZIOS _T("Semaforo dos Vazios")
-#define MUTEX_CONTROLADOR _T("Mutex do Controlador")
+#define SEMAFORO_AVIOES_ATIVOS _T("Semaforo dos Avioes Ativos")
+#define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
+#define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes")
+
+//DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
+#define NOVO_AVIAO 0
+#define	NOVO_DESTINO 1
+#define NOVAS_COORDENADAS 2
+#define CHEGADA_AO_DESTINO 3
+#define ENCERRAR 4
+
+//DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-AVIAO
+#define AVIAO_CONFIRMADO 0
+#define AVIAO_RECUSADO 1
+#define DESTINO_VERIFICADO 2
+#define DESTINO_REJEITADO 3
+#define ENCERRAR 4
 
 
 typedef struct {
@@ -41,6 +61,7 @@ typedef struct {
 	//HANDLE objMapGeral;
 	int n_aeroportos_atuais;
 	int n_avioes_atuais;
+	HANDLE mutex_comunicacao;
 } struct_dados;
 
 typedef struct {
@@ -53,7 +74,7 @@ typedef struct {
 	int id_processo;
 	int lotacao;
 	int velocidade;
-	HANDLE mutex;
+	int tipomsg;
 }  struct_aviao_com;
 
 typedef struct {
@@ -63,6 +84,7 @@ typedef struct {
 	int y_destino;
 	BOOL avancar;
 	BOOL encerrar;
+	int tipomsg;
 }  struct_controlador_com;
 
 typedef struct {
@@ -70,10 +92,18 @@ typedef struct {
 } struct_memoria_particular;
 
 typedef struct {
-	struct_controlador_com controlador[TAM];
-	int in_control;
-	int out_control;
-	int nrControladores;
+	struct_controlador_com coms_controlador[TAM];
+	int in;
+	int out;
 	int nrAvioes;
 } struct_memoria_geral;
+
+typedef struct {
+	int x;
+	int y;
+} struct_posicoes_ocupadas;
+
+typedef struct {
+	struct_controlador_com coms_controlador[MAX_AVIOES];
+} struct_memoria_mapa;
 

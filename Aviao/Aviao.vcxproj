@@ -141,6 +141,9 @@
   <ItemGroup>
     <ClCompile Include="aviao.c" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Control\estruturas.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
