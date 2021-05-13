@@ -272,14 +272,15 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 		_tprintf(_T("Erro ao criar o mutex do aviao!\n"));
 		return -1;
 	}
+	WaitForSingleObject(mutexParticular, INFINITE);
 	_tprintf(_T("Cona5.2"));
 	fflush(stdout);
 	preencheComunicacaoParticular(dados,comunicacaoGeral,&comunicacaoParticular);
-	_tprintf(_T("Cona5.3"));
+	_tprintf(_T("Cona5.3 - %d"), comunicacaoParticular.tipomsg);
 	fflush(stdout);
 	WaitForSingleObject(mutexParticular, INFINITE);
 	_tprintf(_T("Cona5.4"));
-	CopyMemory(&ptrMemoriaParticular->resposta, &comunicacaoParticular, sizeof(struct_controlador_com));
+	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	_tprintf(_T("Cona5.5"));
 	ReleaseMutex(mutexParticular);
 	_tprintf(_T("Cona5.6"));
@@ -374,7 +375,7 @@ int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
 	_tprintf(_T("Cona5.2.2.1"));
 	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
 		_tprintf(_T("Cona5.2.2.2"));
-		if (_tcscmp(dados->aeroportos[i].nome, aeroporto)) {
+		if (_tcscmp(dados->aeroportos[i].nome, aeroporto) == 0) {
 			_tprintf(_T("Cona5.2.2.3"));
 			return i;
 		}

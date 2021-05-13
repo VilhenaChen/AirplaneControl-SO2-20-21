@@ -144,8 +144,9 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	struct_aviao_com comunicacaoGeral;
 	struct_controlador_com comunicacaoParticular;
 	HANDLE semafEscritos, semafLidos, mutexComunicacaoControl, mutexComunicacoesAvioes, mutexAviao;
-	TCHAR aux[TAM];
-	_stprintf_s(aux,_countof(aux) ,MEMORIA_AVIAO, eu->id_processo);
+	TCHAR mem_aviao[TAM], mutex_aviao[TAM];
+	_stprintf_s(mem_aviao, _countof(mem_aviao), MEMORIA_AVIAO, eu->id_processo);
+	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, eu->id_processo);
 
 	//mutex para os avioes escreverem um de cada vez
 	mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
@@ -155,7 +156,7 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	}
 
 	//mutex para a comunicacao control-aviao
-	mutexAviao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
+	mutexAviao = CreateMutex(NULL, FALSE, mutex_aviao);
 	if (mutexAviao == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do Aviao !\n"));
 		return FALSE;
@@ -193,7 +194,7 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 		return FALSE;
 	}
 
-	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), aux);
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), mem_aviao);
 	//Verificar se nao e NULL
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
@@ -224,10 +225,12 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	
 	ReleaseMutex(mutexComunicacoesAvioes);
 	ReleaseSemaphore(semafEscritos,1,NULL);
-
-	WaitForSingleObject(mutexAviao, INFINITE);
-	CopyMemory(&comunicacaoParticular, &ptrMemoriaParticular->resposta,  sizeof(struct_controlador_com));
-	ReleaseMutex(mutexAviao);
+	Sleep(5000);
+	//do {
+		WaitForSingleObject(mutexAviao, INFINITE);
+		CopyMemory(&comunicacaoParticular, &ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
+		ReleaseMutex(mutexAviao);
+	//} while (comunicacaoParticular.tipomsg == 0);
 	_tprintf(_T("Pila %d"),comunicacaoParticular.tipomsg);
 	if (comunicacaoParticular.tipomsg == AVIAO_RECUSADO) {
 		_tprintf(_T("Erro! O avião foi recusado pelo Controlador!\n"));

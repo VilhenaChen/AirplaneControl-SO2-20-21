@@ -23,11 +23,11 @@
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
-#define NOVO_AVIAO 0
-#define	NOVO_DESTINO 1
-#define NOVAS_COORDENADAS 2
-#define CHEGADA_AO_DESTINO 3
-#define ENCERRAR_AVIAO 4
+#define NOVO_AVIAO 1
+#define	NOVO_DESTINO 2
+#define NOVAS_COORDENADAS 3
+#define CHEGADA_AO_DESTINO 4
+#define ENCERRAR_AVIAO 5
 
 //DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-AVIAO
 #define AVIAO_CONFIRMADO 0
@@ -87,7 +87,7 @@ typedef struct {
 }  struct_controlador_com;
 
 typedef struct {
-	struct_controlador_com resposta;
+	struct_controlador_com resposta[1];
 } struct_memoria_particular;
 
 typedef struct {
