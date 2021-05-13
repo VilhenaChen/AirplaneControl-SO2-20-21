@@ -144,6 +144,8 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	struct_aviao_com comunicacaoGeral;
 	struct_controlador_com comunicacaoParticular;
 	HANDLE semafEscritos, semafLidos, mutexComunicacaoControl, mutexComunicacoesAvioes, mutexAviao;
+	TCHAR aux[TAM];
+	_stprintf_s(aux,_countof(aux) ,MEMORIA_AVIAO, eu->id_processo);
 
 	//mutex para os avioes escreverem um de cada vez
 	mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
@@ -178,7 +180,7 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 		_tprintf(_T("Erro ao criar o semáforo dos lidos!\n"));
 		return FALSE;
 	}
-	
+
 	objMapGeral = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
 	//Verificar se nao e NULL
 	if (objMapGeral == NULL) {
@@ -191,7 +193,7 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 		return FALSE;
 	}
 
-	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), MEMORIA_AVIAO,eu->id_processo);
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), aux);
 	//Verificar se nao e NULL
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));

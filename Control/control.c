@@ -243,13 +243,13 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	HANDLE objMapParticular, mutexParticular;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_controlador_com comunicacaoParticular;
-	TCHAR aux[TAM];
-	_stprintf_s(aux, MEMORIA_AVIAO, comunicacaoGeral->id_processo);
+	TCHAR mem_aviao[TAM], mutex_aviao[TAM];
+	_stprintf_s(mem_aviao, _countof(mem_aviao),MEMORIA_AVIAO, comunicacaoGeral->id_processo);
+	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, comunicacaoGeral->id_processo);
 	_tprintf(_T("Cona5.1 - %d"), comunicacaoGeral->id_processo);
-	_tprintf(_T("cenas %s"), aux);
 	fflush(stdout);
 
-	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), aux);
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), mem_aviao);
 	//Verificar se nao e NULL
 	_tprintf(_T("Cona5.1.0"));
 	fflush(stdout);
@@ -267,7 +267,7 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	_tprintf(_T("Cona5.1.2"));
 	fflush(stdout);
 	// colocar em comunicacao particular o que é pretendido enviar
-	mutexParticular = CreateMutex(NULL, FALSE, (MUTEX_AVIAO, comunicacaoGeral->id_processo));
+	mutexParticular = CreateMutex(NULL, FALSE, mutex_aviao);
 	if (mutexParticular == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do aviao!\n"));
 		return -1;
@@ -319,6 +319,13 @@ void Lista(struct_dados* dados) {
 		_tprintf(_T("%s\n"),dados->aeroportos[i].nome);
 		_tprintf(_T("\tCoordenada X: %d\n"),dados->aeroportos[i].pos_x);
 		_tprintf(_T("\tCoordenada Y: %d\n"),dados->aeroportos[i].pos_y);
+	}
+	_tprintf(_T("Lista de Avioes\n"));
+	for (int i = 0; i < dados->n_avioes_atuais; i++) {
+		_tprintf(_T("Aviao: %d %d\n"), i, dados->avioes[i].id_processo);
+		_tprintf(_T("\tCapacidade: %d\n"), dados->avioes[i].lotacao);
+		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino);
+		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
 	}
 
 }
