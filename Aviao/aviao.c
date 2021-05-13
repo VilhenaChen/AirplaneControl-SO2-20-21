@@ -11,34 +11,62 @@
 DWORD WINAPI Viagem(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
 void MenuInicial(struct_dados* dados);
-void registo(struct_dados* dados);
+void Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
 
 
 int _tmain(int argc, TCHAR* argv[]) {
-	struct_dados dados;
+	struct_dados dados; //Podemos tirar penso
 	HANDLE semafAvioesAtuais;
-	
-
-	CreateMutex(0, FALSE, "Local\\$controlador$"); // try to create a named mutex
+	int capacidade = _tstoi(argv[1]);
+	int velocidade = _tstoi(argv[2]);
+	TCHAR aeroportoInicial = argv[3];
+	struct_aviao eu;
+	struct_aeroporto origem;
+	struct_aeroporto destino;
+	eu.origem = &origem;
+	eu.destino = &destino;
+	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
 	if (GetLastError() != ERROR_ALREADY_EXISTS) // did the mutex already exist?
 	{
 		_tprintf(_T("ERRO! Nao existe nenhum controlador aberto!\n"));
 		return -1; // quit; mutex is released automatically
 	}
 
+	if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL) {
+		_tprintf(_T("ERRO! Não foram passados os argumentos necessários ao lançamento do Aviao!\n"));
+		return -1; // quit; mutex is released automatically
+	}
+
+	if (argv[1] <= 0 ) {
+		_tprintf(_T("ERRO! A capacidade do Avião tem de ser superior a 0!\n"));
+		return -1; // quit; mutex is released automatically
+	}
+	if (argv[2] <= 0) {
+		_tprintf(_T("ERRO! A velocidade do Avião tem de ser superior a 0!\n"));
+		return -1; // quit; mutex is released automatically
+	}
+
+	eu.id_processo = GetCurrentProcessId();
+	eu.lotacao = _tstoi(argv[1]);
+	eu.velocidade = _tstoi(argv[2]);
+	_tcscpy_s(eu.origem->nome,_countof(eu.origem->nome), argv[3]);
 
 	semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
 	if (semafAvioesAtuais == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos avioes atuais!\n"));
 		return -1;
 	}
+
+
 	_tprintf(_T("A aguardar por um slot...\n"));
 	WaitForSingleObject(semafAvioesAtuais, INFINITE);
 	_tprintf(_T("Aviao Iniciado...\n"));
 	fflush(stdin);
-
+	Registo(&eu, capacidade, velocidade, aeroportoInicial);
+	//Receber o resultado do registo e caso nao tenha sido aceite terminar fazendo todos os releases e etc.
 	MenuInicial(&dados);
 	ReleaseSemaphore(semafAvioesAtuais, 1, NULL);
+	CloseHandle(semafAvioesAtuais);
 	
 }
 
@@ -99,64 +127,83 @@ void MenuInicial(struct_dados* dados) {
 	return 0;
 }
 
-void registo(struct_dados* dados) {
+void Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]) {
 	struct_memoria_geral* ptrMemoria;
 	HANDLE objMap;
 	struct_aviao_com comunicacao;
-	HANDLE semafEscritos, semafLidos, semafAvioesAtuais, mutexComunicacaoControl, mutexComunicacoesAvioes, mutexAviao;
+	HANDLE semafEscritos, semafLidos, mutexComunicacaoControl, mutexComunicacoesAvioes, mutexAviao;
 
 	//mutex para os avioes escreverem um de cada vez
 	mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
 	if (mutexComunicacoesAvioes == NULL) {
 		_tprintf(_T("Erro ao criar o mutex dos Avioes !\n"));
-		return -1;
+		exit(-1);
 	}
 
 	//mutex para a comunicacao control-aviao
 	mutexAviao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
 	if (mutexAviao == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do Aviao !\n"));
-		return -1;
+		exit(-1);
 	}
 
 	//mutex para garantir que o control já inicializou a estrutura
 	mutexComunicacaoControl = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
 	if (mutexComunicacaoControl == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
-		return -1;
+		exit(-1);
 	}
 
 	//Criacao dos semaforos
 	semafEscritos = CreateSemaphore(NULL, 0, MAX_AVIOES, SEMAFORO_AVIOES);
 	if (semafEscritos == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos escritos!\n"));
-		return -1;
+		exit(-1);
 	}
 
 	semafLidos = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_VAZIOS);
 	if (semafLidos == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos lidos!\n"));
-		return -1;
+		exit(-1);
 	}
 	
 	objMap= CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
 	//Verificar se nao e NULL
 	if (objMap == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Geral!\n"));
-		return -1;
+		exit(-1);
 	}
 	ptrMemoria = (struct_memoria_geral*)MapViewOfFile(objMap, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
 	if (ptrMemoria == NULL) {
 		_tprintf(_T("Erro ao criar o ptrMemoria Geral!\n"));
-		return -1;
+		exit(-1);
 	}
 
+	comunicacao.tipomsg = NOVO_AVIAO;
+	comunicacao.id_processo = eu->id_processo;
+	comunicacao.lotacao = eu->lotacao;
+	comunicacao.velocidade = eu->velocidade;
+	_tcscpy_s(comunicacao.nome_origem,_countof(comunicacao.nome_origem),eu->origem->nome);
+
 	WaitForSingleObject(mutexComunicacaoControl, INFINITE);
+	ReleaseMutex(mutexComunicacaoControl);
+
+	WaitForSingleObject(semafLidos, INFINITE);
 	WaitForSingleObject(mutexComunicacoesAvioes, INFINITE);
 
 	ptrMemoria->nrAvioes = ++(ptrMemoria->nrAvioes);
-
-	ReleaseMutex(mutexComunicacaoControl);
+	
+	CopyMemory(&ptrMemoria->coms_controlador[ptrMemoria->in], &comunicacao, sizeof(struct_aviao_com));
+	ptrMemoria->in = (ptrMemoria->in + 1) % MAX_AVIOES;
+	
 	ReleaseMutex(mutexComunicacoesAvioes);
+	ReleaseSemaphore(semafEscritos,1,NULL);
 
+	CloseHandle(objMap);
+	CloseHandle(semafEscritos);
+	CloseHandle(semafLidos);
+	CloseHandle(mutexComunicacaoControl);
+	CloseHandle(mutexComunicacoesAvioes);
+	CloseHandle(mutexAviao);
 }
+

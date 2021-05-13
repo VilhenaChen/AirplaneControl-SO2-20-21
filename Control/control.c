@@ -11,9 +11,12 @@
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Menu(LPVOID param);
 DWORD WINAPI Comunicacao(LPVOID param);
-void RespondeAoAviao(struct_dados* dados, int id_aviao, struct_controlador_com* comunicacaoGeral);
+void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void Lista(struct_dados* dados);
+int getIndiceAviao(int id_processo, struct_dados* dados);
+void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
+int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
 
 
 int _tmain(int argc, TCHAR* argv[]) {
@@ -35,7 +38,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	
 	dados.n_aeroportos_atuais = 0;
 	
-	CreateMutex(0, FALSE, "Local\\$controlador$"); // try to create a named mutex
+	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
 	if (GetLastError() == ERROR_ALREADY_EXISTS) // did the mutex already exist?
 	{
 		_tprintf(_T("ERRO! Já existe uma instância deste programa a correr!\n"));
@@ -185,7 +188,7 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 	struct_dados* dados = (struct_dados*) param;
 	struct_memoria_geral* ptrMemoriaGeral;
 	HANDLE objMapGeral;
-	struct_controlador_com comunicacaoGeral;
+	struct_aviao_com comunicacaoGeral;
 	HANDLE semafEscritos, semafLidos;
 	//Lê da memoria partilhada geral
 
@@ -221,10 +224,10 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 
 	while (TRUE) {
 		WaitForSingleObject(semafEscritos, INFINITE);
-		CopyMemory(&comunicacaoGeral, &ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->out], sizeof(struct_controlador_com));
+		CopyMemory(&comunicacaoGeral, &ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->out], sizeof(struct_aviao_com));
 		ptrMemoriaGeral->out = (ptrMemoriaGeral->out + 1) % MAX_AVIOES;
 		ReleaseSemaphore(semafLidos, 1, NULL);
-		RespondeAoAviao(dados,id_aviao,&comunicacaoGeral);
+		RespondeAoAviao(dados,&comunicacaoGeral);
 	}
 
 	return 0;
@@ -232,12 +235,12 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 
 //Codigo de Funcoes
 
-void RespondeAoAviao(struct_dados* dados, int id_aviao, struct_controlador_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
+void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
 	HANDLE objMapParticular, mutexParticular;
 	struct_memoria_particular* ptrMemoriaParticular;
-	struct_aviao_com comunicacaoParticular;
+	struct_controlador_com comunicacaoParticular;
 
-	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), (MEMORIA_AVIAO, id_aviao));
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), (MEMORIA_AVIAO, comunicacaoGeral->id_processo));
 	//Verificar se nao e NULL
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
@@ -251,13 +254,14 @@ void RespondeAoAviao(struct_dados* dados, int id_aviao, struct_controlador_com* 
 	}
 
 	// colocar em comunicacao particular o que é pretendido enviar
-	mutexParticular = CreateMutex(NULL, FALSE, (MUTEX_AVIAO, id_aviao));
+	mutexParticular = CreateMutex(NULL, FALSE, (MUTEX_AVIAO, comunicacaoGeral->id_processo));
 	if (mutexParticular == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do aviao!\n"));
 		return -1;
 	}
+	preencheComunicacaoParticular(dados,comunicacaoGeral,&comunicacaoParticular);
 	WaitForSingleObject(mutexParticular, INFINITE);
-	CopyMemory(&ptrMemoriaParticular->aviao, &comunicacaoParticular, sizeof(struct_aviao_com));
+	CopyMemory(&ptrMemoriaParticular->resposta, &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
 }
 
@@ -297,4 +301,50 @@ void Lista(struct_dados* dados) {
 		_tprintf(_T("\tCoordenada Y: %d\n"),dados->aeroportos[i].pos_y);
 	}
 
+}
+
+int getIndiceAviao(int id_processo, struct_dados* dados) {
+	for (int i = 0; i < dados->n_avioes_atuais; i++) {
+		if (dados->avioes[i].id_processo == id_processo) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
+	int indiceAeroporto;
+	switch (comunicacaoGeral->tipomsg)
+	{
+	case NOVO_AVIAO:
+		indiceAeroporto = getIndiceAeroporto(dados,comunicacaoGeral->nome_origem);
+		if (indiceAeroporto == -1) {
+			comunicacaoParticular->tipomsg = AVIAO_RECUSADO;
+			return;
+		}
+		else {
+			comunicacaoParticular->tipomsg = AVIAO_CONFIRMADO;
+			comunicacaoParticular->x_origem = dados->aeroportos[indiceAeroporto].pos_x;
+			comunicacaoParticular->y_origem = dados->aeroportos[indiceAeroporto].pos_y;
+			return;
+		}
+		break;
+	case NOVO_DESTINO:
+		break;
+	case NOVAS_COORDENADAS:
+		break;
+	case CHEGADA_AO_DESTINO:
+		break;
+	case ENCERRAR_AVIAO:
+		break;
+	}
+}
+
+int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
+	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
+		if (_tcscmp(dados->aeroportos[i].nome, aeroporto)) {
+			return i;
+		}
+	}
+	return -1;
 }

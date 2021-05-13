@@ -27,14 +27,14 @@
 #define	NOVO_DESTINO 1
 #define NOVAS_COORDENADAS 2
 #define CHEGADA_AO_DESTINO 3
-#define ENCERRAR 4
+#define ENCERRAR_AVIAO 4
 
 //DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-AVIAO
 #define AVIAO_CONFIRMADO 0
 #define AVIAO_RECUSADO 1
 #define DESTINO_VERIFICADO 2
 #define DESTINO_REJEITADO 3
-#define ENCERRAR 4
+#define ENCERRAR_CONTROLADOR 4
 
 
 typedef struct {
@@ -44,14 +44,14 @@ typedef struct {
 } struct_aeroporto;
 
 typedef struct {
-	int id;
+	int id_processo;
 	int lotacao;
 	int velocidade;
 	int pos_x;
 	int pos_y;
 	struct_aeroporto* origem;
 	struct_aeroporto* destino;
-	HANDLE mutex;
+	//HANDLE mutex;
 } struct_aviao;
 
 typedef struct {
@@ -82,17 +82,16 @@ typedef struct {
 	int y_origem;
 	int x_destino;
 	int y_destino;
-	BOOL avancar;
 	BOOL encerrar;
 	int tipomsg;
 }  struct_controlador_com;
 
 typedef struct {
-	struct_aviao_com aviao;
+	struct_controlador_com resposta;
 } struct_memoria_particular;
 
 typedef struct {
-	struct_controlador_com coms_controlador[TAM];
+	struct_aviao_com coms_controlador[TAM];
 	int in;
 	int out;
 	int nrAvioes;
