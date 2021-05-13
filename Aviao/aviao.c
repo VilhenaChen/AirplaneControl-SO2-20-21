@@ -11,15 +11,19 @@
 DWORD WINAPI Viagem(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
 void MenuInicial(struct_dados* dados);
-void Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
+BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
 
 
 int _tmain(int argc, TCHAR* argv[]) {
+
+#ifdef UNICODE
+	_setmode(_fileno(stdin), _O_WTEXT);
+	_setmode(_fileno(stdout), _O_WTEXT);
+	_setmode(_fileno(stderr), _O_WTEXT);
+#endif
+
 	struct_dados dados; //Podemos tirar penso
 	HANDLE semafAvioesAtuais;
-	int capacidade = _tstoi(argv[1]);
-	int velocidade = _tstoi(argv[2]);
-	TCHAR aeroportoInicial = argv[3];
 	struct_aviao eu;
 	struct_aeroporto origem;
 	struct_aeroporto destino;
@@ -62,7 +66,14 @@ int _tmain(int argc, TCHAR* argv[]) {
 	WaitForSingleObject(semafAvioesAtuais, INFINITE);
 	_tprintf(_T("Aviao Iniciado...\n"));
 	fflush(stdin);
-	Registo(&eu, capacidade, velocidade, aeroportoInicial);
+	if (Registo(&eu, eu.lotacao, eu.velocidade, eu.origem)==FALSE) {
+		ReleaseSemaphore(semafAvioesAtuais, 1, NULL);
+		CloseHandle(semafAvioesAtuais);
+		return -1;
+	}
+	else {
+		_tprintf(_T("Aviâo Registado com Sucesso!\n"));
+	}
 	//Receber o resultado do registo e caso nao tenha sido aceite terminar fazendo todos os releases e etc.
 	MenuInicial(&dados);
 	ReleaseSemaphore(semafAvioesAtuais, 1, NULL);
@@ -72,7 +83,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 
 //Codigo de Threads
-
 DWORD WINAPI Viagem(LPVOID param) {
 	return 0;
 }
@@ -127,63 +137,77 @@ void MenuInicial(struct_dados* dados) {
 	return 0;
 }
 
-void Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]) {
-	struct_memoria_geral* ptrMemoria;
-	HANDLE objMap;
-	struct_aviao_com comunicacao;
+BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoInicial[]) {
+	struct_memoria_geral* ptrMemoriaGeral;
+	struct_memoria_particular* ptrMemoriaParticular;
+	HANDLE objMapGeral, objMapParticular;
+	struct_aviao_com comunicacaoGeral;
+	struct_controlador_com comunicacaoParticular;
 	HANDLE semafEscritos, semafLidos, mutexComunicacaoControl, mutexComunicacoesAvioes, mutexAviao;
 
 	//mutex para os avioes escreverem um de cada vez
 	mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
 	if (mutexComunicacoesAvioes == NULL) {
 		_tprintf(_T("Erro ao criar o mutex dos Avioes !\n"));
-		exit(-1);
+		return FALSE;
 	}
 
 	//mutex para a comunicacao control-aviao
 	mutexAviao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
 	if (mutexAviao == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do Aviao !\n"));
-		exit(-1);
+		return FALSE;
 	}
 
 	//mutex para garantir que o control já inicializou a estrutura
 	mutexComunicacaoControl = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
 	if (mutexComunicacaoControl == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
-		exit(-1);
+		return FALSE;
 	}
 
 	//Criacao dos semaforos
 	semafEscritos = CreateSemaphore(NULL, 0, MAX_AVIOES, SEMAFORO_AVIOES);
 	if (semafEscritos == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos escritos!\n"));
-		exit(-1);
+		return FALSE;
 	}
 
 	semafLidos = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_VAZIOS);
 	if (semafLidos == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos lidos!\n"));
-		exit(-1);
+		return FALSE;
 	}
 	
-	objMap= CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
+	objMapGeral = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
 	//Verificar se nao e NULL
-	if (objMap == NULL) {
+	if (objMapGeral == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Geral!\n"));
-		exit(-1);
+		return FALSE;
 	}
-	ptrMemoria = (struct_memoria_geral*)MapViewOfFile(objMap, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
-	if (ptrMemoria == NULL) {
+	ptrMemoriaGeral = (struct_memoria_geral*)MapViewOfFile(objMapGeral, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
+	if (ptrMemoriaGeral == NULL) {
 		_tprintf(_T("Erro ao criar o ptrMemoria Geral!\n"));
-		exit(-1);
+		return FALSE;
 	}
 
-	comunicacao.tipomsg = NOVO_AVIAO;
-	comunicacao.id_processo = eu->id_processo;
-	comunicacao.lotacao = eu->lotacao;
-	comunicacao.velocidade = eu->velocidade;
-	_tcscpy_s(comunicacao.nome_origem,_countof(comunicacao.nome_origem),eu->origem->nome);
+	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), MEMORIA_AVIAO,eu->id_processo);
+	//Verificar se nao e NULL
+	if (objMapParticular == NULL) {
+		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
+		return FALSE;
+	}
+	ptrMemoriaParticular = (struct_memoria_particular*)MapViewOfFile(objMapParticular, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
+	if (ptrMemoriaParticular == NULL) {
+		_tprintf(_T("Erro ao criar o ptrMemoria Particular!\n"));
+		return FALSE;
+	}
+
+	comunicacaoGeral.tipomsg = NOVO_AVIAO;
+	comunicacaoGeral.id_processo = eu->id_processo;
+	comunicacaoGeral.lotacao = eu->lotacao;
+	comunicacaoGeral.velocidade = eu->velocidade;
+	_tcscpy_s(comunicacaoGeral.nome_origem,_countof(comunicacaoGeral.nome_origem),eu->origem->nome);
 
 	WaitForSingleObject(mutexComunicacaoControl, INFINITE);
 	ReleaseMutex(mutexComunicacaoControl);
@@ -191,19 +215,32 @@ void Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	WaitForSingleObject(semafLidos, INFINITE);
 	WaitForSingleObject(mutexComunicacoesAvioes, INFINITE);
 
-	ptrMemoria->nrAvioes = ++(ptrMemoria->nrAvioes);
+	ptrMemoriaGeral->nrAvioes = ++(ptrMemoriaGeral->nrAvioes);
 	
-	CopyMemory(&ptrMemoria->coms_controlador[ptrMemoria->in], &comunicacao, sizeof(struct_aviao_com));
-	ptrMemoria->in = (ptrMemoria->in + 1) % MAX_AVIOES;
+	CopyMemory(&ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	ptrMemoriaGeral->in = (ptrMemoriaGeral->in + 1) % MAX_AVIOES;
 	
 	ReleaseMutex(mutexComunicacoesAvioes);
 	ReleaseSemaphore(semafEscritos,1,NULL);
 
-	CloseHandle(objMap);
+	WaitForSingleObject(mutexAviao, INFINITE);
+	CopyMemory(&comunicacaoParticular, &ptrMemoriaParticular->resposta,  sizeof(struct_controlador_com));
+	ReleaseMutex(mutexAviao);
+	_tprintf(_T("Pila %d"),comunicacaoParticular.tipomsg);
+	if (comunicacaoParticular.tipomsg == AVIAO_RECUSADO) {
+		_tprintf(_T("Erro! O avião foi recusado pelo Controlador!\n"));
+		return FALSE;
+	}
+	
+	eu->origem->pos_x = comunicacaoParticular.x_origem;
+	eu->origem->pos_y = comunicacaoParticular.y_origem;
+
+	CloseHandle(objMapGeral);
 	CloseHandle(semafEscritos);
 	CloseHandle(semafLidos);
 	CloseHandle(mutexComunicacaoControl);
 	CloseHandle(mutexComunicacoesAvioes);
 	CloseHandle(mutexAviao);
+	return TRUE;
 }
 
