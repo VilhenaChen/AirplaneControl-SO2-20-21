@@ -191,7 +191,6 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 	struct_aviao_com comunicacaoGeral;
 	HANDLE semafEscritos, semafLidos;
 	//Lê da memoria partilhada geral
-	_tprintf(_T("Cona1"));
 	//Criacao dos semaforos
 	semafEscritos = CreateSemaphore(NULL, 0, MAX_AVIOES, SEMAFORO_AVIOES);
 	if (semafEscritos == NULL) {
@@ -221,19 +220,13 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 	ptrMemoriaGeral->nrAvioes = 0;
 
 	ReleaseMutex(dados->mutex_comunicacao);
-	_tprintf(_T("Cona2"));
 	while (TRUE) {
-		_tprintf(_T("Cona3"));
 		WaitForSingleObject(semafEscritos, INFINITE);
-		_tprintf(_T("Cona4"));
 		CopyMemory(&comunicacaoGeral, &ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->out], sizeof(struct_aviao_com));
 		ptrMemoriaGeral->out = (ptrMemoriaGeral->out + 1) % MAX_AVIOES;
 		ReleaseSemaphore(semafLidos, 1, NULL);
-		_tprintf(_T("Cona5"));
 		RespondeAoAviao(dados,&comunicacaoGeral);
-		_tprintf(_T("Cona6"));
 	}
-	_tprintf(_T("Cona7"));
 	return 0;
 }
 
@@ -246,25 +239,21 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	TCHAR mem_aviao[TAM], mutex_aviao[TAM];
 	_stprintf_s(mem_aviao, _countof(mem_aviao),MEMORIA_AVIAO, comunicacaoGeral->id_processo);
 	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, comunicacaoGeral->id_processo);
-	_tprintf(_T("Cona5.1 - %d"), comunicacaoGeral->id_processo);
 	fflush(stdout);
 
 	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), mem_aviao);
 	//Verificar se nao e NULL
-	_tprintf(_T("Cona5.1.0"));
 	fflush(stdout);
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
 		return -1;
 	}
-	_tprintf(_T("Cona5.1.1"));
 	fflush(stdout);
 	ptrMemoriaParticular = (struct_memoria_particular*)MapViewOfFile(objMapParticular, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
 	if (ptrMemoriaParticular == NULL) {
 		_tprintf(_T("Erro ao criar o ptrMemoria Paricular!\n"));
 		return -1;
 	}
-	_tprintf(_T("Cona5.1.2"));
 	fflush(stdout);
 	// colocar em comunicacao particular o que é pretendido enviar
 	mutexParticular = CreateMutex(NULL, FALSE, mutex_aviao);
@@ -273,17 +262,11 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 		return -1;
 	}
 	WaitForSingleObject(mutexParticular, INFINITE);
-	_tprintf(_T("Cona5.2"));
-	fflush(stdout);
 	preencheComunicacaoParticular(dados,comunicacaoGeral,&comunicacaoParticular);
-	_tprintf(_T("Cona5.3 - %d"), comunicacaoParticular.tipomsg);
-	fflush(stdout);
-	WaitForSingleObject(mutexParticular, INFINITE);
-	_tprintf(_T("Cona5.4"));
+	_tprintf(_T("TIPO MSG: %d\n"), comunicacaoParticular.tipomsg);
+	//WaitForSingleObject(mutexParticular, INFINITE);
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
-	_tprintf(_T("Cona5.5"));
 	ReleaseMutex(mutexParticular);
-	_tprintf(_T("Cona5.6"));
 }
 
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados) {
@@ -342,11 +325,9 @@ int getIndiceAviao(int id_processo, struct_dados* dados) {
 
 void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
 	int indiceAeroporto;
-	_tprintf(_T("Cona5.2.1"));
 	switch (comunicacaoGeral->tipomsg)
 	{
 	case NOVO_AVIAO:
-		_tprintf(_T("Cona5.2.2"));
 		indiceAeroporto = getIndiceAeroporto(dados,comunicacaoGeral->nome_origem);
 		if (indiceAeroporto == -1) {
 			comunicacaoParticular->tipomsg = AVIAO_RECUSADO;
@@ -368,18 +349,13 @@ void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comuni
 	case ENCERRAR_AVIAO:
 		break;
 	}
-	_tprintf(_T("Cona5.2.3"));
 }
 
 int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
-	_tprintf(_T("Cona5.2.2.1"));
 	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
-		_tprintf(_T("Cona5.2.2.2"));
 		if (_tcscmp(dados->aeroportos[i].nome, aeroporto) == 0) {
-			_tprintf(_T("Cona5.2.2.3"));
 			return i;
 		}
 	}
-	_tprintf(_T("Cona5.2.2.4"));
 	return -1;
 }
