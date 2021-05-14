@@ -226,17 +226,17 @@ BOOL Registo(struct_aviao* eu, int capacidade, int velocidade, TCHAR aeroportoIn
 	ReleaseMutex(mutexComunicacoesAvioes);
 	ReleaseSemaphore(semafEscritos,1,NULL);
 	//Sleep(5000);
-	//do {
+	do {
 		WaitForSingleObject(mutexAviao, INFINITE);
 		CopyMemory(&comunicacaoParticular, &ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
 		ReleaseMutex(mutexAviao);
-	//} while (comunicacaoParticular.tipomsg == 0);
+	} while (comunicacaoParticular.tipomsg != AVIAO_CONFIRMADO && comunicacaoParticular.tipomsg != AVIAO_RECUSADO && comunicacaoParticular.tipomsg != ENCERRAR_CONTROLADOR);
 	_tprintf(_T("Tipo MSG: %d\n"),comunicacaoParticular.tipomsg);
+
 	if (comunicacaoParticular.tipomsg == AVIAO_RECUSADO) {
 		_tprintf(_T("Erro! O avião foi recusado pelo Controlador!\n"));
 		return FALSE;
 	}
-	
 	eu->origem->pos_x = comunicacaoParticular.x_origem;
 	eu->origem->pos_y = comunicacaoParticular.y_origem;
 

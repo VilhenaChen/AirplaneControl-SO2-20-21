@@ -308,7 +308,7 @@ void Lista(struct_dados* dados) {
 	for (int i = 0; i < dados->n_avioes_atuais; i++) {
 		_tprintf(_T("Aviao: %d %d\n"), i, dados->avioes[i].id_processo);
 		_tprintf(_T("\tCapacidade: %d\n"), dados->avioes[i].lotacao);
-		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino);
+		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino->nome);
 		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
 	}
 
