@@ -126,6 +126,8 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 
 //Codigo de Threads
+
+//Thread Menu
 DWORD WINAPI Menu(LPVOID param) {
 	struct_dados* dados = (struct_dados*)param;
 	TCHAR com_total[TAM];
@@ -182,7 +184,7 @@ DWORD WINAPI Menu(LPVOID param) {
 	return 0;
 }
 
-
+//Thread Comunicação
 DWORD WINAPI Comunicacao(LPVOID param) {
 	int id_aviao = 0;
 	struct_dados* dados = (struct_dados*) param;
@@ -232,6 +234,7 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 
 //Codigo de Funcoes
 
+//Funções de Comunicação
 void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
 	HANDLE objMapParticular, mutexParticular;
 	struct_memoria_particular* ptrMemoriaParticular;
@@ -268,61 +271,6 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
 }
-
-BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados) {
-	if (dados->n_aeroportos_atuais < MAX_AEROPORTOS) {
-		if (x > TAM_MAP || x <= 0 || y > TAM_MAP || y <= 0) {
-			_tprintf(_T("Erro! O valor de X e Y deve ser entre 1 e 1000!!!\n"));
-			return FALSE;
-		}
-
-		for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
-			if (_tcscmp(dados->aeroportos[i].nome, nome) == 0) {
-				_tprintf(_T("Erro! Os aeroportos devem ter nomes distintos!!!\n"));
-				return FALSE;
-			}
-			if ((dados->aeroportos[i].pos_x <= x+10 && dados->aeroportos[i].pos_x >= x-10) && (dados->aeroportos[i].pos_y <= y+10 && dados->aeroportos[i].pos_y >= y-10)) {
-				_tprintf(_T("Erro! Os aeroportos devem estar a uma distância de 10 posições!!!\n"));
-				return FALSE;
-			}
-		}
-		
-		_tcscpy_s(dados->aeroportos[dados->n_aeroportos_atuais].nome, _countof(dados->aeroportos[dados->n_aeroportos_atuais].nome), nome);
-		dados->aeroportos[dados->n_aeroportos_atuais].pos_x = x;
-		dados->aeroportos[dados->n_aeroportos_atuais].pos_y = y;
-		dados->n_aeroportos_atuais++;
-		return TRUE;
-	}
-	_tprintf(_T("Erro! Já foi atingido o máximo de aeroportos\n"));
-	return FALSE;
-}
-
-void Lista(struct_dados* dados) {
-	_tprintf(_T("Lista de Aeroportos\n"));
-	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
-		_tprintf(_T("%s\n"),dados->aeroportos[i].nome);
-		_tprintf(_T("\tCoordenada X: %d\n"),dados->aeroportos[i].pos_x);
-		_tprintf(_T("\tCoordenada Y: %d\n"),dados->aeroportos[i].pos_y);
-	}
-	_tprintf(_T("Lista de Avioes\n"));
-	for (int i = 0; i < dados->n_avioes_atuais; i++) {
-		_tprintf(_T("Aviao: %d %d\n"), i, dados->avioes[i].id_processo);
-		_tprintf(_T("\tCapacidade: %d\n"), dados->avioes[i].lotacao);
-		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino->nome);
-		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
-	}
-
-}
-
-int getIndiceAviao(int id_processo, struct_dados* dados) {
-	for (int i = 0; i < dados->n_avioes_atuais; i++) {
-		if (dados->avioes[i].id_processo == id_processo) {
-			return i;
-		}
-	}
-	return -1;
-}
-
 void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
 	int indiceAeroporto;
 	switch (comunicacaoGeral->tipomsg)
@@ -351,6 +299,34 @@ void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comuni
 	}
 }
 
+//Funções dos Aeroportos
+BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados) {
+	if (dados->n_aeroportos_atuais < MAX_AEROPORTOS) {
+		if (x > TAM_MAP || x <= 0 || y > TAM_MAP || y <= 0) {
+			_tprintf(_T("Erro! O valor de X e Y deve ser entre 1 e 1000!!!\n"));
+			return FALSE;
+		}
+
+		for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
+			if (_tcscmp(dados->aeroportos[i].nome, nome) == 0) {
+				_tprintf(_T("Erro! Os aeroportos devem ter nomes distintos!!!\n"));
+				return FALSE;
+			}
+			if ((dados->aeroportos[i].pos_x <= x+10 && dados->aeroportos[i].pos_x >= x-10) && (dados->aeroportos[i].pos_y <= y+10 && dados->aeroportos[i].pos_y >= y-10)) {
+				_tprintf(_T("Erro! Os aeroportos devem estar a uma distância de 10 posições!!!\n"));
+				return FALSE;
+			}
+		}
+		
+		_tcscpy_s(dados->aeroportos[dados->n_aeroportos_atuais].nome, _countof(dados->aeroportos[dados->n_aeroportos_atuais].nome), nome);
+		dados->aeroportos[dados->n_aeroportos_atuais].pos_x = x;
+		dados->aeroportos[dados->n_aeroportos_atuais].pos_y = y;
+		dados->n_aeroportos_atuais++;
+		return TRUE;
+	}
+	_tprintf(_T("Erro! Já foi atingido o máximo de aeroportos\n"));
+	return FALSE;
+}
 int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
 	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
 		if (_tcscmp(dados->aeroportos[i].nome, aeroporto) == 0) {
@@ -359,3 +335,36 @@ int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
 	}
 	return -1;
 }
+
+//Funções dos Aeroportos
+int getIndiceAviao(int id_processo, struct_dados* dados) {
+	for (int i = 0; i < dados->n_avioes_atuais; i++) {
+		if (dados->avioes[i].id_processo == id_processo) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+//Funções lista
+void Lista(struct_dados* dados) {
+	_tprintf(_T("Lista de Aeroportos\n"));
+	for (int i = 0; i < dados->n_aeroportos_atuais; i++) {
+		_tprintf(_T("%s\n"),dados->aeroportos[i].nome);
+		_tprintf(_T("\tCoordenada X: %d\n"),dados->aeroportos[i].pos_x);
+		_tprintf(_T("\tCoordenada Y: %d\n"),dados->aeroportos[i].pos_y);
+	}
+	_tprintf(_T("Lista de Avioes\n"));
+	for (int i = 0; i < dados->n_avioes_atuais; i++) {
+		_tprintf(_T("Aviao: %d %d\n"), i, dados->avioes[i].id_processo);
+		_tprintf(_T("\tCapacidade: %d\n"), dados->avioes[i].lotacao);
+		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino->nome);
+		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
+	}
+
+}
+
+
+
+
+
