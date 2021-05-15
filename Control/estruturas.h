@@ -10,7 +10,7 @@
 #define TAM 200
 #define TAM_MAP 1000
 #define MAX_AVIOES 10
-#define MAX_AEROPORTOS 2
+#define MAX_AEROPORTOS 10
 
 //DEFINES PARA NOMES DE MUTEXES, SEMAFOROS, ETC.
 #define MEMORIA_CONTROL _T("Memoria Control")

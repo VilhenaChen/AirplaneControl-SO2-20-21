@@ -7,15 +7,17 @@
 #include "estruturas.h"
 #define NTHREADS 2
 
+//FALTA MUTEX PARA ESTRUTURA DOS AEROPORTOS
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Menu(LPVOID param);
 DWORD WINAPI Comunicacao(LPVOID param);
 void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
+void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void Lista(struct_dados* dados);
 int getIndiceAviao(int id_processo, struct_dados* dados);
-void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
+void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
 int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
 
 
@@ -37,6 +39,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 	
 	dados.n_aeroportos_atuais = 0;
+	dados.n_avioes_atuais = 0;
 	
 	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
 	if (GetLastError() == ERROR_ALREADY_EXISTS) // did the mutex already exist?
@@ -228,6 +231,7 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 		ptrMemoriaGeral->out = (ptrMemoriaGeral->out + 1) % MAX_AVIOES;
 		ReleaseSemaphore(semafLidos, 1, NULL);
 		RespondeAoAviao(dados,&comunicacaoGeral);
+
 	}
 	return 0;
 }
@@ -265,13 +269,13 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 		return -1;
 	}
 	WaitForSingleObject(mutexParticular, INFINITE);
-	preencheComunicacaoParticular(dados,comunicacaoGeral,&comunicacaoParticular);
+	preencheComunicacaoParticularEAtualizaInformacoes(dados,comunicacaoGeral,&comunicacaoParticular);
 	_tprintf(_T("TIPO MSG: %d\n"), comunicacaoParticular.tipomsg);
 	//WaitForSingleObject(mutexParticular, INFINITE);
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
 }
-void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
+void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
 	int indiceAeroporto;
 	switch (comunicacaoGeral->tipomsg)
 	{
@@ -285,6 +289,9 @@ void preencheComunicacaoParticular(struct_dados* dados, struct_aviao_com* comuni
 			comunicacaoParticular->tipomsg = AVIAO_CONFIRMADO;
 			comunicacaoParticular->x_origem = dados->aeroportos[indiceAeroporto].pos_x;
 			comunicacaoParticular->y_origem = dados->aeroportos[indiceAeroporto].pos_y;
+			_tprintf(_T("Sou Linda 0"));
+			InsereAviao(dados, comunicacaoGeral->id_processo, comunicacaoGeral->lotacao, comunicacaoGeral->velocidade, indiceAeroporto);
+			_tprintf(_T("Sou Linda 10"));
 			return;
 		}
 		break;
@@ -336,7 +343,7 @@ int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
 	return -1;
 }
 
-//Funções dos Aeroportos
+//Funções dos Avioes
 int getIndiceAviao(int id_processo, struct_dados* dados) {
 	for (int i = 0; i < dados->n_avioes_atuais; i++) {
 		if (dados->avioes[i].id_processo == id_processo) {
@@ -344,6 +351,26 @@ int getIndiceAviao(int id_processo, struct_dados* dados) {
 		}
 	}
 	return -1;
+}
+
+void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto) {
+	_tprintf(_T("Sou Linda 1"));
+	dados->avioes[dados->n_avioes_atuais].id_processo = idProcesso;
+	_tprintf(_T("Sou Linda 2"));
+	dados->avioes[dados->n_avioes_atuais].lotacao = capacidade;
+	_tprintf(_T("Sou Linda 3"));
+	dados->avioes[dados->n_avioes_atuais].velocidade = velocidade;
+	_tprintf(_T("Sou Linda 4"));
+	dados->avioes[dados->n_avioes_atuais].pos_x = dados->aeroportos[indiceAeroporto].pos_x;
+	_tprintf(_T("Sou Linda 5"));
+	dados->avioes[dados->n_avioes_atuais].pos_y = dados->aeroportos[indiceAeroporto].pos_y;
+	_tprintf(_T("Sou Linda 6"));
+	dados->avioes[dados->n_avioes_atuais].origem = &dados->aeroportos[indiceAeroporto];
+	_tprintf(_T("Sou Linda 7"));
+	dados->avioes[dados->n_avioes_atuais].destino = NULL;
+	_tprintf(_T("Sou Linda 8"));
+	dados->n_avioes_atuais = dados->n_avioes_atuais++;
+	_tprintf(_T("Sou Linda 9"));
 }
 
 //Funções lista
@@ -356,9 +383,13 @@ void Lista(struct_dados* dados) {
 	}
 	_tprintf(_T("Lista de Avioes\n"));
 	for (int i = 0; i < dados->n_avioes_atuais; i++) {
-		_tprintf(_T("Aviao: %d %d\n"), i, dados->avioes[i].id_processo);
+		_tprintf(_T("Aviao: %d - %d\n"), i, dados->avioes[i].id_processo);
 		_tprintf(_T("\tCapacidade: %d\n"), dados->avioes[i].lotacao);
-		_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino->nome);
+		_tprintf(_T("\tOrigem: %s\n"), dados->avioes[i].origem->nome);
+		if (dados->avioes[i].destino != NULL) {
+			_tprintf(_T("\tDestino: %s\n"), dados->avioes[i].destino->nome);
+		}
+		_tprintf(_T("\tPosição Atual: x: %d\t y: %d\n"), dados->avioes[i].pos_x, dados->avioes[i].pos_y);
 		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
 	}
 
