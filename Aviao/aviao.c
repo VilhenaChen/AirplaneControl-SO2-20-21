@@ -25,10 +25,12 @@ typedef struct {
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Viagem(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
-void MenuInicial(struct_dados* dados);
+void MenuInicial(struct_util* util);
+void MenuSecundario(struct_util* util);
 BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
 void FechaHandles(struct_util* util);
 BOOL InicializaUtil(struct_util* util);
+BOOL ProximoDestino(struct_util* util,TCHAR destino[]);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -100,7 +102,8 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("Aviâo Registado com Sucesso!\n"));
 	}
 
-	MenuInicial(&dados);
+	MenuInicial(&util);
+	MenuSecundario(&util);
 
 	FechaHandles(&util);
 	
@@ -119,7 +122,7 @@ DWORD WINAPI Movimento(LPVOID param) {
 //Codigo das funcoes
 
 //Funções de Menus
-void MenuInicial(struct_dados* dados) {
+void MenuInicial(struct_util* util) {
 
 	TCHAR com_total[TAM];
 	TCHAR com[TAM], arg1[TAM], arg2[TAM], arg3[TAM];
@@ -132,35 +135,68 @@ void MenuInicial(struct_dados* dados) {
 		arg2[0] = '\0';
 		arg3[0] = '\0';
 		cont = 0;
+		_tprintf(_T("--------------------------------------------\n"));
 		_tprintf(_T("Menu Principal\n"));
 		_tprintf(_T("\t-> Proximo Destino (destino <Aeroporto>)\n"));
-		_tprintf(_T("\t-> Iniciar Viagem (descolar)\n"));
 		_tprintf(_T("\t-> Encerrar (encerrar)\n"));
 		_tprintf(_T("Comando: "));
 		_fgetts(com_total, TAM, stdin);
 		com_total[_tcslen(com_total) - 1] = '\0';
 		cont = _stscanf_s(com_total, _T("%s %s %s %s"), com, (unsigned)_countof(com), arg1, (unsigned)_countof(arg1), arg2, (unsigned)_countof(arg2), arg3, (unsigned)_countof(arg3));
 		if (_tcscmp(com, _T("destino")) == 0 && cont == 2) {
-
+			if (ProximoDestino(util, arg1) == FALSE) {
+				continue;
+			}
+			return;
 		}
 		else {
-			if (_tcscmp(com, _T("descolar")) == 0 && cont == 1) {
-
+			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
+				return;
 			}
-			else
-			{
-				if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
-
-				}
-				else {
-					_tprintf(_T("Comando Inválido!!!!\n"));
-					fflush(stdin);
-				}
+			else {
+				_tprintf(_T("Comando Inválido!!!!\n"));
 			}
 		}
 
 	} while (TRUE);
-	return 0;
+	return;
+}
+
+void MenuSecundario(struct_util* util) {
+	TCHAR com_total[TAM];
+	TCHAR com[TAM], arg1[TAM], arg2[TAM], arg3[TAM];
+
+	int cont;
+	do {
+		com_total[0] = '\0';
+		com[0] = '\0';
+		arg1[0] = '\0';
+		arg2[0] = '\0';
+		arg3[0] = '\0';
+		cont = 0;
+		_tprintf(_T("--------------------------------------------\n"));
+		_tprintf(_T("Proximo Destino -> %s\n"),util->eu.destino->nome);
+		_tprintf(_T("\t-> Descolar (descolar)\n"));
+		_tprintf(_T("\t-> Encerrar (encerrar)\n"));
+		_tprintf(_T("Comando: "));
+		_fgetts(com_total, TAM, stdin);
+		com_total[_tcslen(com_total) - 1] = '\0';
+		cont = _stscanf_s(com_total, _T("%s %s %s %s"), com, (unsigned)_countof(com), arg1, (unsigned)_countof(arg1), arg2, (unsigned)_countof(arg2), arg3, (unsigned)_countof(arg3));
+		if (_tcscmp(com, _T("descolar")) == 0 && cont == 1) {
+
+		}
+		else {
+			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
+
+			}
+			else
+			{
+				_tprintf(_T("Comando Inválido!!!!\n"));
+			}
+		}
+
+	} while (TRUE);
+	return;
 }
 
 //Funções do Registo
@@ -291,4 +327,41 @@ void FechaHandles(struct_util* util) {
 	CloseHandle(util->mutexComunicacoesAvioes);
 	CloseHandle(util->mutexAviao);
 	
+}
+
+//Funcoes Destino
+BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
+
+	struct_aviao_com comunicacaoGeral;
+	struct_controlador_com comunicacaoParticular;
+
+	comunicacaoGeral.tipomsg = NOVO_DESTINO;
+	comunicacaoGeral.id_processo = util->eu.id_processo;
+	_tcscpy_s(comunicacaoGeral.nome_destino, _countof(comunicacaoGeral.nome_destino), destino);
+
+	WaitForSingleObject(util->semafLidos, INFINITE);
+	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
+
+	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
+
+	ReleaseMutex(util->mutexComunicacoesAvioes);
+	ReleaseSemaphore(util->semafEscritos, 1, NULL);
+
+	do {
+		WaitForSingleObject(util->mutexAviao, INFINITE);
+		CopyMemory(&comunicacaoParticular, &util->ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
+		ReleaseMutex(util->mutexAviao);
+	} while (comunicacaoParticular.tipomsg != DESTINO_VERIFICADO && comunicacaoParticular.tipomsg != DESTINO_REJEITADO);
+	_tprintf(_T("Tipo MSG: %d\n"), comunicacaoParticular.tipomsg);
+
+	if (comunicacaoParticular.tipomsg == DESTINO_REJEITADO) {
+		_tprintf(_T("Erro! O destino inserido não é válido!\n"));
+		return FALSE;
+	}
+
+	_tcscpy_s(util->eu.destino->nome, _countof(util->eu.destino->nome), destino);
+	util->eu.destino->pos_x = comunicacaoParticular.x_destino;
+	util->eu.destino->pos_y = comunicacaoParticular.y_destino;
+	return TRUE;
 }

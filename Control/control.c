@@ -12,7 +12,7 @@
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Menu(LPVOID param);
 DWORD WINAPI Comunicacao(LPVOID param);
-void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
+BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void Lista(struct_dados* dados);
@@ -165,7 +165,7 @@ DWORD WINAPI Menu(LPVOID param) {
 				}
 				else {
 					if (_tcscmp(com, _T("encerrar")) == 0) {
-						break;
+						return 0;
 					}
 					else {
 						_tprintf(_T("Comando Inválido!!!!\n"));
@@ -230,16 +230,21 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 		CopyMemory(&comunicacaoGeral, &ptrMemoriaGeral->coms_controlador[ptrMemoriaGeral->out], sizeof(struct_aviao_com));
 		ptrMemoriaGeral->out = (ptrMemoriaGeral->out + 1) % MAX_AVIOES;
 		ReleaseSemaphore(semafLidos, 1, NULL);
-		RespondeAoAviao(dados,&comunicacaoGeral);
+		if (RespondeAoAviao(dados, &comunicacaoGeral) == FALSE) {
+			break;
+		}
 
 	}
+	CloseHandle(objMapGeral);
+	CloseHandle(semafEscritos);
+	CloseHandle(semafLidos);
 	return 0;
 }
 
 //Codigo de Funcoes
 
 //Funções de Comunicação
-void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
+BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
 	HANDLE objMapParticular, mutexParticular;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_controlador_com comunicacaoParticular;
@@ -253,20 +258,20 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	fflush(stdout);
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
-		return -1;
+		return FALSE;
 	}
 	fflush(stdout);
 	ptrMemoriaParticular = (struct_memoria_particular*)MapViewOfFile(objMapParticular, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
 	if (ptrMemoriaParticular == NULL) {
 		_tprintf(_T("Erro ao criar o ptrMemoria Paricular!\n"));
-		return -1;
+		return FALSE;
 	}
 	fflush(stdout);
 	// colocar em comunicacao particular o que é pretendido enviar
 	mutexParticular = CreateMutex(NULL, FALSE, mutex_aviao);
 	if (mutexParticular == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do aviao!\n"));
-		return -1;
+		return FALSE;
 	}
 	WaitForSingleObject(mutexParticular, INFINITE);
 	preencheComunicacaoParticularEAtualizaInformacoes(dados,comunicacaoGeral,&comunicacaoParticular);
@@ -274,9 +279,12 @@ void RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	//WaitForSingleObject(mutexParticular, INFINITE);
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
+	return TRUE;
 }
+
 void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular) {
 	int indiceAeroporto;
+	int indiceAviao;
 	switch (comunicacaoGeral->tipomsg)
 	{
 	case NOVO_AVIAO:
@@ -289,13 +297,24 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 			comunicacaoParticular->tipomsg = AVIAO_CONFIRMADO;
 			comunicacaoParticular->x_origem = dados->aeroportos[indiceAeroporto].pos_x;
 			comunicacaoParticular->y_origem = dados->aeroportos[indiceAeroporto].pos_y;
-			_tprintf(_T("Sou Linda 0"));
 			InsereAviao(dados, comunicacaoGeral->id_processo, comunicacaoGeral->lotacao, comunicacaoGeral->velocidade, indiceAeroporto);
-			_tprintf(_T("Sou Linda 10"));
 			return;
 		}
 		break;
 	case NOVO_DESTINO:
+		indiceAeroporto = getIndiceAeroporto(dados, comunicacaoGeral->nome_destino);
+		if (indiceAeroporto == -1) {
+			comunicacaoParticular->tipomsg = DESTINO_REJEITADO;
+			return;
+		}
+		else {
+			comunicacaoParticular->tipomsg = DESTINO_VERIFICADO;
+			comunicacaoParticular->x_destino = dados->aeroportos[indiceAeroporto].pos_x;
+			comunicacaoParticular->y_destino = dados->aeroportos[indiceAeroporto].pos_y;
+			indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo,dados);
+			dados->avioes[indiceAviao].destino = &dados->aeroportos[indiceAeroporto];
+			return;
+		}
 		break;
 	case NOVAS_COORDENADAS:
 		break;
@@ -354,23 +373,14 @@ int getIndiceAviao(int id_processo, struct_dados* dados) {
 }
 
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto) {
-	_tprintf(_T("Sou Linda 1"));
 	dados->avioes[dados->n_avioes_atuais].id_processo = idProcesso;
-	_tprintf(_T("Sou Linda 2"));
 	dados->avioes[dados->n_avioes_atuais].lotacao = capacidade;
-	_tprintf(_T("Sou Linda 3"));
 	dados->avioes[dados->n_avioes_atuais].velocidade = velocidade;
-	_tprintf(_T("Sou Linda 4"));
 	dados->avioes[dados->n_avioes_atuais].pos_x = dados->aeroportos[indiceAeroporto].pos_x;
-	_tprintf(_T("Sou Linda 5"));
 	dados->avioes[dados->n_avioes_atuais].pos_y = dados->aeroportos[indiceAeroporto].pos_y;
-	_tprintf(_T("Sou Linda 6"));
 	dados->avioes[dados->n_avioes_atuais].origem = &dados->aeroportos[indiceAeroporto];
-	_tprintf(_T("Sou Linda 7"));
 	dados->avioes[dados->n_avioes_atuais].destino = NULL;
-	_tprintf(_T("Sou Linda 8"));
 	dados->n_avioes_atuais = dados->n_avioes_atuais++;
-	_tprintf(_T("Sou Linda 9"));
 }
 
 //Funções lista
