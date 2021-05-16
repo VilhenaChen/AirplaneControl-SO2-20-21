@@ -6,7 +6,7 @@
 #include <io.h>
 #include "../Control/estruturas.h"
 #define NTHREADS 2
-#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
+//#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
 
 //Estrutura de mutexes, semaforos, etc para passar entre funções
 typedef struct {
@@ -18,11 +18,11 @@ typedef struct {
 	HANDLE mutexComunicacoesAvioes;
 	HANDLE mutexAviao;	
 	HANDLE semafAvioesAtuais;
-	HANDLE mutexEncerraThread;
+	//HANDLE mutexEncerraThread;
 	struct_memoria_geral* ptrMemoriaGeral;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_aviao eu;
-	BOOL encerraThread;
+	//BOOL encerraThread;
 } struct_util;
 
 //Declaracao de Funcoes e Threads
@@ -106,7 +106,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	else {
 		_tprintf(_T("Aviâo Registado com Sucesso!\n"));
 	}
-	do {
+	//do {
 		MenuInicial(&util);
 		MenuSecundario(&util);
 
@@ -122,16 +122,16 @@ int _tmain(int argc, TCHAR* argv[]) {
 			return -1;
 		}
 
-		indiceThread = WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
-		indiceThread = indiceThread - WAIT_OBJECT_0;	
+		/*indiceThread =*/ WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
+		/*indiceThread = indiceThread - WAIT_OBJECT_0;	
 		_tprintf(_T("Indice: %d\n"), indiceThread);
 		if (indiceThread != 1) {
 			_tprintf(_T("Indice: %d\n"), indiceThread);
 			TerminateThread(hthreads[1],0);
-		}
+		}*/
 
 
-	} while (indiceThread != 1);
+	//} while (indiceThread != 1);
 
 	//Fazer com que volte ao menu inicial se não pretender encerrar mesmo
 
@@ -147,7 +147,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 DWORD WINAPI Movimento(LPVOID param) {
 	struct_util* util = (struct_util*)param;
-		Sleep(5000);
+		Sleep(10000);
 	return 0;
 }
 
@@ -309,7 +309,7 @@ BOOL InicializaUtil(struct_util* util) {
 	_stprintf_s(mem_aviao, _countof(mem_aviao), MEMORIA_AVIAO, util->eu.id_processo);
 	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, util->eu.id_processo);
 
-	util->encerraThread = FALSE;
+	//util->encerraThread = FALSE;
 
 	//mutex para os avioes escreverem um de cada vez
 	util->mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
@@ -332,12 +332,13 @@ BOOL InicializaUtil(struct_util* util) {
 		return FALSE;
 	}
 
+	/*
 	//mutex para verificar a flag de encerrar
 	util->mutexEncerraThread = CreateMutex(NULL, FALSE, MUTEX_ENCERRAR_THREAD);
 	if (util->mutexEncerraThread == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
 		return FALSE;
-	}
+	}*/
 
 	//Criacao dos semaforos
 
@@ -396,7 +397,7 @@ void FechaHandles(struct_util* util) {
 	CloseHandle(util->mutexComunicacaoControl);
 	CloseHandle(util->mutexComunicacoesAvioes);
 	CloseHandle(util->mutexAviao);
-	CloseHandle(util->mutexEncerraThread);
+	//CloseHandle(util->mutexEncerraThread);
 	
 }
 

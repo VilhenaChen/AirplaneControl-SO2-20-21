@@ -316,7 +316,7 @@ BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 		return FALSE;
 	}
 	WaitForSingleObject(mutexParticular, INFINITE);
-	preencheComunicacaoParticularEAtualizaInformacoes(dados,comunicacaoGeral,&comunicacaoParticular);
+	preencheComunicacaoParticularEAtualizaInformacoes(dados, comunicacaoGeral, &comunicacaoParticular);
 	_tprintf(_T("TIPO MSG: %d\n"), comunicacaoParticular.tipomsg);
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
@@ -461,39 +461,39 @@ void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int veloci
 
 void EliminaAviao(struct_dados* dados, int idProcesso) {
 	struct_aviao avioesAux[MAX_AVIOES];
+	int indiceApagar=-1;
 	int n_avioes = dados->n_avioes_atuais;
-	for (int i = 0, j=0; i < n_avioes; i++) {
-		if (dados->avioes[i].id_processo != idProcesso) {
-			avioesAux[j].id_processo = dados->avioes[i].id_processo;
-			avioesAux[j].lotacao = dados->avioes[i].lotacao;
-			avioesAux[j].origem = dados->avioes[i].origem;
-			avioesAux[j].pos_x = dados->avioes[i].pos_x;
-			avioesAux[j].pos_y = dados->avioes[i].pos_y;
-			avioesAux[j].velocidade = dados->avioes[i].velocidade;
-			avioesAux[j].destino = dados->avioes[i].destino;
-			j++;
+	for (int i = 0; i < n_avioes; i++) {
+		if (dados->avioes[i].id_processo == idProcesso) {
+			indiceApagar = i;
+			break;
+		}
+	}
+	_tprintf(_T("INDICE A APAGAR: %d"), indiceApagar);
+	int j = indiceApagar;
+	j++;
+	for (int i = indiceApagar; i < n_avioes; i++,j++)
+	{
+		if (j != (n_avioes)) {
+			dados->avioes[i].id_processo = dados->avioes[j].id_processo;
+			dados->avioes[i].lotacao = dados->avioes[j].lotacao;
+			dados->avioes[i].origem = dados->avioes[j].origem;
+			dados->avioes[i].pos_x = dados->avioes[j].pos_x;
+			dados->avioes[i].pos_y = dados->avioes[j].pos_y;
+			dados->avioes[i].velocidade = dados->avioes[j].velocidade;
+			dados->avioes[i].destino = dados->avioes[j].destino;
+		}
+		else {
+			dados->avioes[i].id_processo = 0;
+			dados->avioes[i].lotacao = 0;
+			dados->avioes[i].origem = NULL;
+			dados->avioes[i].pos_x = 0;
+			dados->avioes[i].pos_y = 0;
+			dados->avioes[i].velocidade = 0;
+			dados->avioes[i].destino = NULL;
 		}
 	}
 	n_avioes--;
-	for (int i = n_avioes; i < MAX_AVIOES; i++) {
-		avioesAux[i].id_processo = 0;
-		avioesAux[i].lotacao = 0;
-		avioesAux[i].origem = NULL;
-		avioesAux[i].pos_x = 0;
-		avioesAux[i].pos_y = 0; 
-		avioesAux[i].velocidade = 0;		
-		avioesAux[i].destino = NULL;
-	}
-
-	for (int i = n_avioes; i < MAX_AVIOES; i++) {
-		dados->avioes[i].id_processo = avioesAux[i].id_processo;
-		dados->avioes[i].lotacao = avioesAux[i].lotacao;
-		dados->avioes[i].origem = avioesAux[i].origem;
-		dados->avioes[i].pos_x = avioesAux[i].pos_x;
-		dados->avioes[i].pos_y = avioesAux[i].pos_y;
-		dados->avioes[i].velocidade = avioesAux[i].velocidade;
-		dados->avioes[i].destino = avioesAux[i].destino;
-	}
 	dados->n_avioes_atuais = n_avioes;
 
 }
