@@ -172,7 +172,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 			return -1;
 		}
 
-		/*indiceThread =*/ WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
+		WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
 		/*indiceThread = indiceThread - WAIT_OBJECT_0;	
 		_tprintf(_T("Indice: %d\n"), indiceThread);
 		if (indiceThread != 1) {
@@ -184,7 +184,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	//} while (indiceThread != 1);
 
 	//Fazer com que volte ao menu inicial se não pretender encerrar mesmo
-
+	Encerra(&util);
 	for (int i = 0; i < NTHREADS; i++) {
 		CloseHandle(hthreads[i]);
 	}
