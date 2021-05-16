@@ -21,8 +21,6 @@
 #define SEMAFORO_AVIOES_ATIVOS _T("Semaforo dos Avioes Ativos")
 #define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes")
-#define MUTEX_ACEDER_AVIOES _T("Mutex para aceder a estrutura dos avioes")
-#define MUTEX_ACEDER_AEROPORTOS _T("Mutex para aceder a estrutura dos aeroportos")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1

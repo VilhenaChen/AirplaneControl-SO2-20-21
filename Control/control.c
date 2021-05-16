@@ -6,6 +6,8 @@
 #include <io.h>
 #include "estruturas.h"
 #define NTHREADS 2
+#define MUTEX_ACEDER_AVIOES _T("Mutex para aceder a estrutura dos avioes")
+#define MUTEX_ACEDER_AEROPORTOS _T("Mutex para aceder a estrutura dos aeroportos")
 
 //Estrutura onde sao guardados os dados do control
 typedef struct {
