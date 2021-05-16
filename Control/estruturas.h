@@ -21,6 +21,8 @@
 #define SEMAFORO_AVIOES_ATIVOS _T("Semaforo dos Avioes Ativos")
 #define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes")
+#define MUTEX_ACEDER_AVIOES _T("Mutex para aceder a estrutura dos avioes")
+#define MUTEX_ACEDER_AEROPORTOS _T("Mutex para aceder a estrutura dos aeroportos")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
@@ -54,15 +56,6 @@ typedef struct {
 	//HANDLE mutex;
 } struct_aviao;
 
-typedef struct {
-	struct_aeroporto aeroportos[MAX_AEROPORTOS];
-	struct_aviao avioes[MAX_AVIOES];
-	//struct_memoria_geral* ptrMemoriaGeral;
-	//HANDLE objMapGeral;
-	int n_aeroportos_atuais;
-	int n_avioes_atuais;
-	HANDLE mutex_comunicacao;
-} struct_dados;
 
 typedef struct {
 	TCHAR nome_origem[TAM];

@@ -23,14 +23,15 @@ typedef struct {
 } struct_util;
 
 //Declaracao de Funcoes e Threads
-DWORD WINAPI Viagem(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
+DWORD WINAPI OpcaoEncerrar(LPVOID param);
 void MenuInicial(struct_util* util);
 void MenuSecundario(struct_util* util);
 BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
 void FechaHandles(struct_util* util);
 BOOL InicializaUtil(struct_util* util);
 BOOL ProximoDestino(struct_util* util,TCHAR destino[]);
+void Encerra(struct_util* util);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -40,7 +41,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	_setmode(_fileno(stderr), _O_WTEXT);
 #endif
 
-	struct_dados dados; //Podemos tirar penso
+	HANDLE hthreads[NTHREADS];
 	struct_aeroporto origem;
 	struct_aeroporto destino;
 	struct_util util;
@@ -104,6 +105,28 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 	MenuInicial(&util);
 	MenuSecundario(&util);
+	
+	//Criacao das Threads
+	hthreads[0] = CreateThread(NULL, 0, Movimento, &util, 0, NULL);
+	if (hthreads[0] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
+		return -1;
+	}
+	hthreads[1] = CreateThread(NULL, 0, OpcaoEncerrar, &util, 0, NULL);
+	if (hthreads[0] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
+		return -1;
+	}
+
+	WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
+
+	//Fazer com que volte ao menu inicial se não pretender encerrar mesmo
+
+	for (int i = 0; i < NTHREADS; i++) {
+		CloseHandle(hthreads[i]);
+
+
+	}
 
 	FechaHandles(&util);
 	
@@ -111,13 +134,33 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 
 //Codigo de Threads
-DWORD WINAPI Viagem(LPVOID param) {
+
+DWORD WINAPI Movimento(LPVOID param) {
+	struct_util* util = (struct_util*)param;
+	do {
+		Sleep(10000);
+	} while (TRUE);
 	return 0;
 }
 
-DWORD WINAPI Movimento(LPVOID param) {
+DWORD WINAPI OpcaoEncerrar(LPVOID param) {
+	TCHAR com_total[TAM];
+	com_total[0] = '\0';
+	struct_util* util = (struct_util*)param;
+	do {
+		_tprintf(_T("Encerrar (encerrar)\n"));
+		_tprintf(_T("Comando: "));
+		_fgetts(com_total, TAM, stdin);
+		com_total[_tcslen(com_total) - 1] = '\0';
+		if ((_tcscmp(com_total, _T("encerrar")) == 0)) {
+			break;
+		}
+	} while (TRUE);
+
+	Encerra(util);
 	return 0;
 }
+
 
 //Codigo das funcoes
 
@@ -151,7 +194,9 @@ void MenuInicial(struct_util* util) {
 		}
 		else {
 			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
-				return;
+				Encerra(util);
+				FechaHandles(util);
+				exit(0);
 			}
 			else {
 				_tprintf(_T("Comando Inválido!!!!\n"));
@@ -183,11 +228,13 @@ void MenuSecundario(struct_util* util) {
 		com_total[_tcslen(com_total) - 1] = '\0';
 		cont = _stscanf_s(com_total, _T("%s %s %s %s"), com, (unsigned)_countof(com), arg1, (unsigned)_countof(arg1), arg2, (unsigned)_countof(arg2), arg3, (unsigned)_countof(arg3));
 		if (_tcscmp(com, _T("descolar")) == 0 && cont == 1) {
-
+			return;
 		}
 		else {
 			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
-
+				Encerra(util);
+				FechaHandles(util);
+				exit(0);
 			}
 			else
 			{
@@ -364,4 +411,22 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 	util->eu.destino->pos_x = comunicacaoParticular.x_destino;
 	util->eu.destino->pos_y = comunicacaoParticular.y_destino;
 	return TRUE;
+}
+//Funções Encerrar
+void Encerra(struct_util* util) {
+
+	struct_aviao_com comunicacaoGeral;
+	comunicacaoGeral.tipomsg = ENCERRAR_AVIAO;
+	comunicacaoGeral.id_processo = util->eu.id_processo;
+
+	WaitForSingleObject(util->semafLidos, INFINITE);
+	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
+
+	util->ptrMemoriaGeral->nrAvioes = --(util->ptrMemoriaGeral->nrAvioes);
+
+	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
+
+	ReleaseMutex(util->mutexComunicacoesAvioes);
+	ReleaseSemaphore(util->semafEscritos, 1, NULL);
 }
