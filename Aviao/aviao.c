@@ -43,7 +43,25 @@ typedef struct {
 	//BOOL encerraThread;
 } struct_util;
 
-
+//Funções relógio
+/*static double PerfCounterFreq; // n ticks por seg.
+void initClock() {
+	LARGE_INTEGER aux;
+	if (!QueryPerformanceFrequency(&aux))
+		_tprintf(TEXT("\nSorry - No can do em QueryPerfFreq\n"));
+	PerfCounterFreq = (double)(aux.QuadPart); // / 1000.0;
+	_tprintf(TEXT("\nTicks por sec.%f\n"), PerfCounterFreq);
+}
+__int64 startClock() {
+	LARGE_INTEGER aux;
+	QueryPerformanceCounter(&aux);
+	return aux.QuadPart;
+}
+double stopClock(__int64 from) {
+	LARGE_INTEGER aux;
+	QueryPerformanceCounter(&aux);
+	return (double)(aux.QuadPart - from) / PerfCounterFreq;
+}*/
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Movimento(LPVOID param);
@@ -183,8 +201,36 @@ DWORD WINAPI Movimento(LPVOID param) {
 	int novo_x;
 	int novo_y;
 	int resultado;
+	double espera;
+	espera = (1 / (double)util->eu.velocidade);
+	espera = espera * 1000;
+	_tprintf(_T("\nespera: %f\n"), espera);
+	/*LARGE_INTEGER instante;
+	// variáveis para cronómetro
+	__int64 clockticks;
+	double duracao;
+	HANDLE timer;
+	int restante;*/
+
+	/*
+	initClock();
+	instante.QuadPart = (-(util->eu.velocidade * 1000000000LL));//-50000000LL; // Multiplos de 100 Nano Segundos*/
+
+	//Criar Objeto
+	//timer = CreateWaitableTimer(NULL, TRUE /*Manual / False -> Periodico*/, NULL /*_T("Waitable")*/);
+	/*if (timer == NULL) {
+		_tprintf(_T("Erro ao criar o Waitable Timer!\n"));
+		return -1;
+	}*/
+
 	//chamar move
-	do {
+	do {	
+		//Programar Manual -> Toda a vez que se quer despertar
+		//SetWaitableTimer(timer, &instante, 0 /* >0 ms -> periodo*/, NULL, NULL, 0);
+		//Programar Periodico -> Apenas a primeira vez
+
+		//clockticks = startClock();
+		
 		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
 		if (resultado == 0) {
 			//se retornar 0 chegou ao destino e informa o control
@@ -210,7 +256,9 @@ DWORD WINAPI Movimento(LPVOID param) {
 		util->eu.pos_x = novo_x;
 		util->eu.pos_y = novo_y;
 		_tprintf(_T("Avancei para as coordenadas x: %d ,y: %d\n"), util->eu.pos_x, util->eu.pos_y);
+		//duracao = stopClock(&clockticks);
 
+		Sleep(espera);
 
 	} while (TRUE);
 	return 0;
