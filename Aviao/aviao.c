@@ -6,24 +6,44 @@
 #include <io.h>
 #include "../Control/estruturas.h"
 #define NTHREADS 2
+#define MUTEX_MOVIMENTO_AVIOES _T("Mutex para a movimentacao dos avioes")
+#define MEMORIA_MOVIMENTO_AVIOES _T("Memoria para a movimentacao dos avioes")
 //#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
 
 //Estrutura de mutexes, semaforos, etc para passar entre funções
 typedef struct {
+	int id_processo_aviao;
+	int x;
+	int y;
+} struct_posicoes_ocupadas;
+
+typedef struct {
+	struct_posicoes_ocupadas pos_ocup[10];
+	int n_pos_ocup;
+} struct_memoria_mapa;
+
+typedef struct {
 	HANDLE objMapGeral;
 	HANDLE objMapParticular;
+	HANDLE objMapMapa;
 	HANDLE semafEscritos;
 	HANDLE semafLidos;
 	HANDLE mutexComunicacaoControl;
 	HANDLE mutexComunicacoesAvioes;
 	HANDLE mutexAviao;	
+	HANDLE mutexMovimentoAvioes;
 	HANDLE semafAvioesAtuais;
 	//HANDLE mutexEncerraThread;
 	struct_memoria_geral* ptrMemoriaGeral;
 	struct_memoria_particular* ptrMemoriaParticular;
+	struct_memoria_mapa* ptrMemoriaMapa;
 	struct_aviao eu;
+	int (*ptrmove)(int, int, int, int, int*, int*);
+	HMODULE hDLL;
 	//BOOL encerraThread;
 } struct_util;
+
+
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Movimento(LPVOID param);
@@ -35,6 +55,9 @@ void FechaHandles(struct_util* util);
 BOOL InicializaUtil(struct_util* util);
 BOOL ProximoDestino(struct_util* util,TCHAR destino[]);
 void Encerra(struct_util* util);
+BOOL verificaCoordenadasOcupadas(struct_util* util, int novo_x, int novo_y);
+void AlteraPosicaoNaMemoria(struct_util* util, int novo_x, int novo_y);
+void EnviarNovasCoordenadasAoControl(struct_util* util, int novo_x, int novo_y);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -50,7 +73,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	struct_util util;
 	util.eu.origem = &origem;
 	util.eu.destino = &destino;
-	int indiceThread;
+	//int indiceThread;
 
 	//Verificar se o Control já está a correr
 	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
@@ -94,9 +117,13 @@ int _tmain(int argc, TCHAR* argv[]) {
 	_tprintf(_T("Aviao Iniciado...\n"));
 
 	InicializaUtil(&util);
-
+	WaitForSingleObject(util.mutexMovimentoAvioes, INFINITE);
+	if (util.ptrMemoriaMapa->n_pos_ocup == NULL) {
+		util.ptrMemoriaMapa->n_pos_ocup = 0;
+	}
+	ReleaseMutex(util.mutexMovimentoAvioes);
 	//Registo do avião no Control
-	if (Registo(&util, util.eu.lotacao, util.eu.velocidade, util.eu.origem)==FALSE) {
+	if (Registo(&util, util.eu.lotacao, util.eu.velocidade, util.eu.origem->nome)==FALSE) {
 		WaitForSingleObject(util.mutexComunicacoesAvioes, INFINITE);
 		util.ptrMemoriaGeral->nrAvioes = --(util.ptrMemoriaGeral->nrAvioes);
 		ReleaseMutex(util.mutexComunicacoesAvioes);
@@ -106,6 +133,9 @@ int _tmain(int argc, TCHAR* argv[]) {
 	else {
 		_tprintf(_T("Aviâo Registado com Sucesso!\n"));
 	}
+
+
+
 	//do {
 		MenuInicial(&util);
 		MenuSecundario(&util);
@@ -147,7 +177,36 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 DWORD WINAPI Movimento(LPVOID param) {
 	struct_util* util = (struct_util*)param;
+	BOOL ocupada = FALSE;
+	int novo_x;
+	int novo_y;
+	int resultado;
+	//chamar move
+	do {
+		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
+		if (resultado == 0) {
+			//se retornar 0 chegou ao destino e informa o control
+			return 0;
+		}
+		if (resultado == 2) {
+			return -1;
+		}
+		//verificar na memoria partilhada se alguem esta naquela posicao e se sim fazer algo
+		do {
+			ocupada = verificaCoordenadasOcupadas(util, novo_x, novo_y);
+		} while (ocupada == TRUE);
+		AlteraPosicaoNaMemoria(util, novo_x, novo_y);
+
+		//enviar as novas coordenadas ao control
+		EnviarNovasCoordenadasAoControl(util, novo_x, novo_y);
+
+		//guardar em si as novas coordenadas
+		util->eu.pos_x = novo_x;
+		util->eu.pos_y = novo_y;
+		_tprintf(_T("Avancei para as coordenadas x: %d ,y: %d\n"), util->eu.pos_x, util->eu.pos_y);
+
 		Sleep(10000);
+	} while (TRUE);
 	return 0;
 }
 
@@ -177,6 +236,50 @@ DWORD WINAPI OpcaoEncerrar(LPVOID param) {
 
 
 //Codigo das funcoes
+
+
+//Funções do movimento
+BOOL verificaCoordenadasOcupadas(struct_util* util, int novo_x, int novo_y) {
+	WaitForSingleObject(util->mutexMovimentoAvioes, INFINITE);
+	for (int i = 0; i < util->ptrMemoriaMapa->n_pos_ocup; i++) {
+		if (util->ptrMemoriaMapa->pos_ocup[i].x == novo_x && util->ptrMemoriaMapa->pos_ocup[i].y == novo_y) {
+			return TRUE;
+			break;
+		}
+	}
+	ReleaseMutex(util->mutexMovimentoAvioes);
+	return FALSE;
+}
+
+void AlteraPosicaoNaMemoria(struct_util* util, int novo_x, int novo_y) {
+	WaitForSingleObject(util->mutexMovimentoAvioes, INFINITE);
+	for (int i = 0; i < util->ptrMemoriaMapa->n_pos_ocup; i++) {
+		if (util->ptrMemoriaMapa->pos_ocup[i].id_processo_aviao == util->eu.id_processo) {
+			util->ptrMemoriaMapa->pos_ocup[i].x = novo_x;
+			util->ptrMemoriaMapa->pos_ocup[i].y = novo_y;
+			break;
+		}
+	}
+	ReleaseMutex(util->mutexMovimentoAvioes);
+}
+
+void EnviarNovasCoordenadasAoControl(struct_util* util, int novo_x, int novo_y) {
+
+	struct_aviao_com comunicacaoGeral;
+	comunicacaoGeral.tipomsg = NOVAS_COORDENADAS;
+	comunicacaoGeral.id_processo = util->eu.id_processo;
+	comunicacaoGeral.pos_x = novo_x;
+	comunicacaoGeral.pos_y = novo_y;
+
+	WaitForSingleObject(util->semafLidos, INFINITE);
+	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
+
+	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
+
+	ReleaseMutex(util->mutexComunicacoesAvioes);
+	ReleaseSemaphore(util->semafEscritos, 1, NULL);
+}
 
 //Funções de Menus
 void MenuInicial(struct_util* util) {
@@ -299,6 +402,8 @@ BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoI
 	}
 	util->eu.origem->pos_x = comunicacaoParticular.x_origem;
 	util->eu.origem->pos_y = comunicacaoParticular.y_origem;
+	util->eu.pos_x = comunicacaoParticular.x_origem;
+	util->eu.pos_y = comunicacaoParticular.y_origem;
 
 	return TRUE;
 }
@@ -310,6 +415,17 @@ BOOL InicializaUtil(struct_util* util) {
 	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, util->eu.id_processo);
 
 	//util->encerraThread = FALSE;
+	//DLL
+	util->hDLL = LoadLibraryEx(_T("SO2_TP_DLL_2021.dll"), NULL, 0);
+	if (util->hDLL != NULL) {
+
+		FARPROC ptrGenerico; //Ponteiro genérico pode ser tanto para procurar a função dentro da DLL como uma variável
+		ptrGenerico = GetProcAddress(util->hDLL, "move");
+		if (ptrGenerico != NULL) {
+			util->ptrmove = (int (*) (int, int, int, int, int*, int*)) ptrGenerico;
+		}
+
+	}
 
 	//mutex para os avioes escreverem um de cada vez
 	util->mutexComunicacoesAvioes = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_AVIAO);
@@ -329,6 +445,13 @@ BOOL InicializaUtil(struct_util* util) {
 	util->mutexComunicacaoControl = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
 	if (util->mutexComunicacaoControl == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
+		return FALSE;
+	}
+
+	//mutex para garantir que o control já inicializou a estrutura
+	util->mutexMovimentoAvioes = CreateMutex(NULL, FALSE, MUTEX_MOVIMENTO_AVIOES);
+	if (util->mutexMovimentoAvioes == NULL) {
+		_tprintf(_T("Erro ao criar o mutex do movimento dos aviões!\n"));
 		return FALSE;
 	}
 
@@ -384,6 +507,18 @@ BOOL InicializaUtil(struct_util* util) {
 		return FALSE;
 	}
 
+	//Memória Partilhada Movimentacao Avioes
+	util->objMapMapa = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_mapa), MEMORIA_MOVIMENTO_AVIOES);
+	if (util->objMapMapa == NULL) {
+		_tprintf(_T("Erro ao criar o File Mapping do Mapa!\n"));
+		return FALSE;
+	}
+
+	util->ptrMemoriaMapa = (struct_memoria_mapa*)MapViewOfFile(util->objMapMapa, FILE_MAP_WRITE | FILE_MAP_READ, 0, 0, 0);
+	if (util->ptrMemoriaMapa == NULL) {
+		_tprintf(_T("Erro ao criar o ptrMemoria do Mapa!\n"));
+		return FALSE;
+	}
 	return TRUE;
 }
 
@@ -397,6 +532,9 @@ void FechaHandles(struct_util* util) {
 	CloseHandle(util->mutexComunicacaoControl);
 	CloseHandle(util->mutexComunicacoesAvioes);
 	CloseHandle(util->mutexAviao);
+	CloseHandle(util->mutexMovimentoAvioes);
+	CloseHandle(util->objMapMapa);
+	FreeLibrary(util->hDLL);
 	//CloseHandle(util->mutexEncerraThread);
 	
 }

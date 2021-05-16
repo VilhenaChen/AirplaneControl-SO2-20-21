@@ -60,8 +60,6 @@ typedef struct {
 	TCHAR nome_destino[TAM];
 	int pos_x;
 	int pos_y;
-	int prox_x;
-	int prox_y;
 	int id_processo;
 	int lotacao;
 	int velocidade;
@@ -88,12 +86,5 @@ typedef struct {
 	int nrAvioes;
 } struct_memoria_geral;
 
-typedef struct {
-	int x;
-	int y;
-} struct_posicoes_ocupadas;
 
-typedef struct {
-	struct_controlador_com coms_controlador[MAX_AVIOES];
-} struct_memoria_mapa;
 

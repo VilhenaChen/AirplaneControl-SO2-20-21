@@ -383,9 +383,15 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 }
 
 void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comunicacaoGeral) {
+	int indiceAviao = -1;
 	switch (comunicacaoGeral->tipomsg)
 	{
 	case NOVAS_COORDENADAS:
+		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+		dados->avioes[indiceAviao].pos_x = comunicacaoGeral->pos_x;
+		dados->avioes[indiceAviao].pos_y = comunicacaoGeral->pos_y;
+		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
 	case CHEGADA_AO_DESTINO:
 		break;
