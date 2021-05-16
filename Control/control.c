@@ -391,9 +391,18 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
 		dados->avioes[indiceAviao].pos_x = comunicacaoGeral->pos_x;
 		dados->avioes[indiceAviao].pos_y = comunicacaoGeral->pos_y;
+		_tprintf(_T("Avião: %d - %d --- Posição: %d, %d\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].pos_x, dados->avioes[indiceAviao].pos_y);
 		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
 	case CHEGADA_AO_DESTINO:
+		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+		dados->avioes[indiceAviao].pos_x = dados->avioes[indiceAviao].destino->pos_x;
+		dados->avioes[indiceAviao].pos_y = dados->avioes[indiceAviao].destino->pos_y;
+		dados->avioes[indiceAviao].origem = dados->avioes[indiceAviao].destino;
+		dados->avioes[indiceAviao].destino = NULL;
+		_tprintf(_T("Avião: %d - %d --- Aterrou no Aeroporto de %s\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].origem->nome);
+		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
 	case ENCERRAR_AVIAO:
 		EliminaAviao(dados, comunicacaoGeral->id_processo);

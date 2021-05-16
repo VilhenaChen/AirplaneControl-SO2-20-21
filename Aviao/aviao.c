@@ -58,6 +58,8 @@ void Encerra(struct_util* util);
 BOOL verificaCoordenadasOcupadas(struct_util* util, int novo_x, int novo_y);
 void AlteraPosicaoNaMemoria(struct_util* util, int novo_x, int novo_y);
 void EnviarNovasCoordenadasAoControl(struct_util* util, int novo_x, int novo_y);
+void AvisaControlDaChegada(struct_util* util);
+void AlteraMinhasInformacoes(struct_util* util);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -186,6 +188,10 @@ DWORD WINAPI Movimento(LPVOID param) {
 		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
 		if (resultado == 0) {
 			//se retornar 0 chegou ao destino e informa o control
+			AlteraPosicaoNaMemoria(util, (-1), (-1));
+			AvisaControlDaChegada(util);
+			AlteraMinhasInformacoes(util);
+			_tprintf(_T("Aterrei no aeroporto de %s"), util->eu.origem->nome);
 			return 0;
 		}
 		if (resultado == 2) {
@@ -205,7 +211,7 @@ DWORD WINAPI Movimento(LPVOID param) {
 		util->eu.pos_y = novo_y;
 		_tprintf(_T("Avancei para as coordenadas x: %d ,y: %d\n"), util->eu.pos_x, util->eu.pos_y);
 
-		Sleep(10000);
+
 	} while (TRUE);
 	return 0;
 }
@@ -279,6 +285,30 @@ void EnviarNovasCoordenadasAoControl(struct_util* util, int novo_x, int novo_y) 
 
 	ReleaseMutex(util->mutexComunicacoesAvioes);
 	ReleaseSemaphore(util->semafEscritos, 1, NULL);
+}
+
+void AvisaControlDaChegada(struct_util* util) {
+	struct_aviao_com comunicacaoGeral;
+	comunicacaoGeral.tipomsg = CHEGADA_AO_DESTINO;
+	comunicacaoGeral.id_processo = util->eu.id_processo;
+
+	WaitForSingleObject(util->semafLidos, INFINITE);
+	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
+
+	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
+
+	ReleaseMutex(util->mutexComunicacoesAvioes);
+	ReleaseSemaphore(util->semafEscritos, 1, NULL);
+}
+
+void AlteraMinhasInformacoes(struct_util* util) {
+	_tcscpy_s(util->eu.origem->nome, _countof(util->eu.origem->nome), util->eu.destino->nome);
+	util->eu.origem->pos_x = util->eu.destino->pos_x;
+	util->eu.origem->pos_y = util->eu.destino->pos_y;
+	util->eu.pos_x = util->eu.origem->pos_x;
+	util->eu.pos_y = util->eu.origem->pos_y;
+	util->eu.destino = NULL;
 }
 
 //Funções de Menus
