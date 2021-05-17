@@ -33,35 +33,13 @@ typedef struct {
 	HANDLE mutexAviao;	
 	HANDLE mutexMovimentoAvioes;
 	HANDLE semafAvioesAtuais;
-	//HANDLE mutexEncerraThread;
 	struct_memoria_geral* ptrMemoriaGeral;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_memoria_mapa* ptrMemoriaMapa;
 	struct_aviao eu;
 	int (*ptrmove)(int, int, int, int, int*, int*);
 	HMODULE hDLL;
-	//BOOL encerraThread;
 } struct_util;
-
-//Funções relógio
-/*static double PerfCounterFreq; // n ticks por seg.
-void initClock() {
-	LARGE_INTEGER aux;
-	if (!QueryPerformanceFrequency(&aux))
-		_tprintf(TEXT("\nSorry - No can do em QueryPerfFreq\n"));
-	PerfCounterFreq = (double)(aux.QuadPart); // / 1000.0;
-	_tprintf(TEXT("\nTicks por sec.%f\n"), PerfCounterFreq);
-}
-__int64 startClock() {
-	LARGE_INTEGER aux;
-	QueryPerformanceCounter(&aux);
-	return aux.QuadPart;
-}
-double stopClock(__int64 from) {
-	LARGE_INTEGER aux;
-	QueryPerformanceCounter(&aux);
-	return (double)(aux.QuadPart - from) / PerfCounterFreq;
-}*/
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Movimento(LPVOID param);
@@ -173,17 +151,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 		}
 
 		WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
-		/*indiceThread = indiceThread - WAIT_OBJECT_0;	
-		_tprintf(_T("Indice: %d\n"), indiceThread);
-		if (indiceThread != 1) {
-			_tprintf(_T("Indice: %d\n"), indiceThread);
-			TerminateThread(hthreads[1],0);
-		}*/
 
-
-	//} while (indiceThread != 1);
-
-	//Fazer com que volte ao menu inicial se não pretender encerrar mesmo
 	Encerra(&util);
 	for (int i = 0; i < NTHREADS; i++) {
 		CloseHandle(hthreads[i]);
@@ -204,33 +172,8 @@ DWORD WINAPI Movimento(LPVOID param) {
 	double espera;
 	espera = (1 / (double)util->eu.velocidade);
 	espera = espera * 1000;
-	_tprintf(_T("\nespera: %f\n"), espera);
-	/*LARGE_INTEGER instante;
-	// variáveis para cronómetro
-	__int64 clockticks;
-	double duracao;
-	HANDLE timer;
-	int restante;*/
 
-	/*
-	initClock();
-	instante.QuadPart = (-(util->eu.velocidade * 1000000000LL));//-50000000LL; // Multiplos de 100 Nano Segundos*/
-
-	//Criar Objeto
-	//timer = CreateWaitableTimer(NULL, TRUE /*Manual / False -> Periodico*/, NULL /*_T("Waitable")*/);
-	/*if (timer == NULL) {
-		_tprintf(_T("Erro ao criar o Waitable Timer!\n"));
-		return -1;
-	}*/
-
-	//chamar move
 	do {	
-		//Programar Manual -> Toda a vez que se quer despertar
-		//SetWaitableTimer(timer, &instante, 0 /* >0 ms -> periodo*/, NULL, NULL, 0);
-		//Programar Periodico -> Apenas a primeira vez
-
-		//clockticks = startClock();
-		
 		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
 		if (resultado == 0) {
 			//se retornar 0 chegou ao destino e informa o control
@@ -256,7 +199,6 @@ DWORD WINAPI Movimento(LPVOID param) {
 		util->eu.pos_x = novo_x;
 		util->eu.pos_y = novo_y;
 		_tprintf(_T("Avancei para as coordenadas x: %d ,y: %d\n"), util->eu.pos_x, util->eu.pos_y);
-		//duracao = stopClock(&clockticks);
 
 		Sleep(espera);
 
@@ -472,7 +414,6 @@ BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoI
 		CopyMemory(&comunicacaoParticular, &util->ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
 		ReleaseMutex(util->mutexAviao);
 	} while (comunicacaoParticular.tipomsg != AVIAO_CONFIRMADO && comunicacaoParticular.tipomsg != AVIAO_RECUSADO );
-	_tprintf(_T("Tipo MSG: %d\n"),comunicacaoParticular.tipomsg);
 
 	if (comunicacaoParticular.tipomsg == AVIAO_RECUSADO) {
 		_tprintf(_T("Erro! O avião foi recusado pelo Controlador!\n"));
@@ -532,15 +473,6 @@ BOOL InicializaUtil(struct_util* util) {
 		_tprintf(_T("Erro ao criar o mutex do movimento dos aviões!\n"));
 		return FALSE;
 	}
-
-	/*
-	//mutex para verificar a flag de encerrar
-	util->mutexEncerraThread = CreateMutex(NULL, FALSE, MUTEX_ENCERRAR_THREAD);
-	if (util->mutexEncerraThread == NULL) {
-		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
-		return FALSE;
-	}*/
-
 	//Criacao dos semaforos
 
 	//Semáforo para controlar as comunicações escritas
@@ -641,7 +573,6 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 		CopyMemory(&comunicacaoParticular, &util->ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
 		ReleaseMutex(util->mutexAviao);
 	} while (comunicacaoParticular.tipomsg != DESTINO_VERIFICADO && comunicacaoParticular.tipomsg != DESTINO_REJEITADO);
-	_tprintf(_T("Tipo MSG: %d\n"), comunicacaoParticular.tipomsg);
 
 	if (comunicacaoParticular.tipomsg == DESTINO_REJEITADO) {
 		_tprintf(_T("Erro! O destino inserido não é válido!\n"));

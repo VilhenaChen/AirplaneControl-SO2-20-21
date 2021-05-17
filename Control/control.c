@@ -317,7 +317,6 @@ BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	}
 	WaitForSingleObject(mutexParticular, INFINITE);
 	preencheComunicacaoParticularEAtualizaInformacoes(dados, comunicacaoGeral, &comunicacaoParticular);
-	_tprintf(_T("TIPO MSG: %d\n"), comunicacaoParticular.tipomsg);
 	CopyMemory(&ptrMemoriaParticular->resposta[0], &comunicacaoParticular, sizeof(struct_controlador_com));
 	ReleaseMutex(mutexParticular);
 	return TRUE;
@@ -484,7 +483,6 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 			break;
 		}
 	}
-	_tprintf(_T("INDICE A APAGAR: %d"), indiceApagar);
 	int j = indiceApagar;
 	j++;
 	for (int i = indiceApagar; i < n_avioes; i++,j++)

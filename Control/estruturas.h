@@ -51,7 +51,6 @@ typedef struct {
 	int pos_y;
 	struct_aeroporto* origem;
 	struct_aeroporto* destino;
-	//HANDLE mutex;
 } struct_aviao;
 
 
