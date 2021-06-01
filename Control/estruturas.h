@@ -15,12 +15,12 @@
 //DEFINES PARA NOMES DE MUTEXES, SEMAFOROS, ETC.
 #define MEMORIA_CONTROL _T("Memoria Control")
 #define MEMORIA_AVIAO _T("Memoria aviao %d")
-#define MUTEX_AVIAO _T("Mutex do Aviao %d")
+#define MUTEX_AVIAO _T("Mutex do Aviao %d") //Comunicacao entre Controlador e Aviao
 #define SEMAFORO_AVIOES _T("Semaforo dos Avioes")
 #define SEMAFORO_VAZIOS _T("Semaforo dos Vazios")
 #define SEMAFORO_AVIOES_ATIVOS _T("Semaforo dos Avioes Ativos")
 #define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
-#define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes")
+#define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes") // Bloqueio da escrita dos avioes para o control quando um esta a escrever
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
@@ -63,7 +63,7 @@ typedef struct {
 	int lotacao;
 	int velocidade;
 	int tipomsg;
-}  struct_aviao_com;
+}  struct_aviao_com; //Aviao Control
 
 typedef struct {
 	int x_origem;
@@ -72,18 +72,18 @@ typedef struct {
 	int y_destino;
 	BOOL encerrar;
 	int tipomsg;
-}  struct_controlador_com;
+}  struct_controlador_com; //Control Aviao
 
 typedef struct {
 	struct_controlador_com resposta[1];
-} struct_memoria_particular;
+} struct_memoria_particular; //Resposta Control -> Aviao
 
 typedef struct {
 	struct_aviao_com coms_controlador[TAM];
 	int in;
 	int out;
 	int nrAvioes;
-} struct_memoria_geral;
+} struct_memoria_geral; //Resposta Aviao -> Control
 
 
 
