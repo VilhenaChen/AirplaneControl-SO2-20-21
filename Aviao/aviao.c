@@ -133,7 +133,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 	}
 
 
-
 	//do {
 		MenuInicial(&util);
 		MenuSecundario(&util);
@@ -177,6 +176,7 @@ DWORD WINAPI Movimento(LPVOID param) {
 		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
 		if (resultado == 0) {
 			//se retornar 0 chegou ao destino e informa o control
+			// -1 para quando estiver num aeroporto puderem estar mais que 1
 			AlteraPosicaoNaMemoria(util, (-1), (-1));
 			AvisaControlDaChegada(util);
 			AlteraMinhasInformacoes(util);

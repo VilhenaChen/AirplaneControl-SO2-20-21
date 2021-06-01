@@ -508,7 +508,6 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 	}
 	n_avioes--;
 	dados->n_avioes_atuais = n_avioes;
-
 }
 
 //Funções lista
