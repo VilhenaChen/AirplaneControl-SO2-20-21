@@ -5,9 +5,11 @@
 #include <fcntl.h>
 #include <io.h>
 #include "../Control/estruturas.h"
-#define NTHREADS 2
+#define NTHREADSPRINCIPAIS 2
+#define NTHREADSMOVIMENTO 2
 #define MUTEX_MOVIMENTO_AVIOES _T("Mutex para a movimentacao dos avioes")
 #define MEMORIA_MOVIMENTO_AVIOES _T("Memoria para a movimentacao dos avioes")
+#define MUTEX_ENCERRAR_MOVIMENTO _T("Mutex para verificar o encerramento do movimento")
 //#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
 
 //Estrutura de mutexes, semaforos, etc para passar entre funções
@@ -33,6 +35,7 @@ typedef struct {
 	HANDLE mutexAviao;	
 	HANDLE mutexMovimentoAvioes;
 	HANDLE semafAvioesAtuais;
+	HANDLE mutexEncerrarMovimento;
 	struct_memoria_geral* ptrMemoriaGeral;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_memoria_mapa* ptrMemoriaMapa;
@@ -42,6 +45,8 @@ typedef struct {
 } struct_util;
 
 //Declaracao de Funcoes e Threads
+DWORD WINAPI Principal(LPVOID param);
+DWORD WINAPI VerificaEncerramentoControl(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
 DWORD WINAPI OpcaoEncerrar(LPVOID param);
 void MenuInicial(struct_util* util);
@@ -64,8 +69,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	_setmode(_fileno(stdout), _O_WTEXT);
 	_setmode(_fileno(stderr), _O_WTEXT);
 #endif
-
-	HANDLE hthreads[NTHREADS];
+	HANDLE hthreadsPrincipais[NTHREADSPRINCIPAIS];
 	struct_aeroporto origem;
 	struct_aeroporto destino;
 	struct_util util;
@@ -132,36 +136,66 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("Aviâo Registado com Sucesso!\n"));
 	}
 
+	//Criacao das Threads
+	hthreadsPrincipais[0] = CreateThread(NULL, 0, Principal, &util, 0, NULL);
+	if (hthreadsPrincipais[0] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread Principal!\n"));
+		return -1;
+	}
+	hthreadsPrincipais[1] = CreateThread(NULL, 0, VerificaEncerramentoControl, &util, 0, NULL);
+	if (hthreadsPrincipais[1] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Verificação do Encerramento do Control!\n"));
+		return -1;
+	}
 
-
-	//do {
-		MenuInicial(&util);
-		MenuSecundario(&util);
-
-		//Criacao das Threads
-		hthreads[0] = CreateThread(NULL, 0, Movimento, &util, 0, NULL);
-		if (hthreads[0] == NULL) {
-			_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
-			return -1;
-		}
-		hthreads[1] = CreateThread(NULL, 0, OpcaoEncerrar, &util, 0, NULL);
-		if (hthreads[0] == NULL) {
-			_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
-			return -1;
-		}
-
-		WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
+	WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
+	
+	for (int i = 0; i < NTHREADSPRINCIPAIS; i++) {
+		CloseHandle(hthreadsPrincipais[i]);
+	}
 
 	Encerra(&util);
-	for (int i = 0; i < NTHREADS; i++) {
-		CloseHandle(hthreads[i]);
-	}
+
 	FechaHandles(&util);
 	
 }
 
 
 //Codigo de Threads
+DWORD WINAPI Principal(LPVOID param) {
+	struct_util* util = (struct_util*)param;
+	HANDLE hthreadsMovimento[NTHREADSMOVIMENTO];
+	int indiceParou = -1;
+
+	//do {
+		MenuInicial(util);
+		MenuSecundario(util);
+
+		//Criacao das Threads
+		hthreadsMovimento[0] = CreateThread(NULL, 0, Movimento, util, 0, NULL);
+		if (hthreadsMovimento[0] == NULL) {
+			_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
+			return -1;
+		}
+		hthreadsMovimento[1] = CreateThread(NULL, 0, OpcaoEncerrar, util, 0, NULL);
+		if (hthreadsMovimento[1] == NULL) {
+			_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
+			return -1;
+		}
+
+		indiceParou = WaitForMultipleObjects(NTHREADSMOVIMENTO, hthreadsMovimento, FALSE, INFINITE);
+
+		indiceParou = indiceParou - WAIT_OBJECT_0;		
+
+		for (int i = 0; i < NTHREADSMOVIMENTO; i++) {
+			if (CloseHandle(hthreadsMovimento[i]) == 0) {
+				_tprintf(_T("ERRO! A thread não parou!\n"));
+			}
+		}
+
+	//} while (indiceParou == 0);
+	return 0;
+}
 
 DWORD WINAPI Movimento(LPVOID param) {
 	struct_util* util = (struct_util*)param;
@@ -177,6 +211,7 @@ DWORD WINAPI Movimento(LPVOID param) {
 		resultado = util->ptrmove(util->eu.pos_x, util->eu.pos_y, util->eu.destino->pos_x, util->eu.destino->pos_y, &novo_x, &novo_y);
 		if (resultado == 0) {
 			//se retornar 0 chegou ao destino e informa o control
+			// -1 para quando estiver num aeroporto puderem estar mais que 1
 			AlteraPosicaoNaMemoria(util, (-1), (-1));
 			AvisaControlDaChegada(util);
 			AlteraMinhasInformacoes(util);
@@ -230,6 +265,14 @@ DWORD WINAPI OpcaoEncerrar(LPVOID param) {
 	return 0;
 }
 
+
+
+DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
+	do {
+		Sleep(10000);
+	} while (TRUE);
+	return 0;
+}
 
 //Codigo das funcoes
 
@@ -473,6 +516,14 @@ BOOL InicializaUtil(struct_util* util) {
 		_tprintf(_T("Erro ao criar o mutex do movimento dos aviões!\n"));
 		return FALSE;
 	}
+
+	//mutex para verificar o encerramento do movimento
+	util->mutexEncerrarMovimento = CreateMutex(NULL, FALSE, MUTEX_ENCERRAR_MOVIMENTO);
+	if (util->mutexEncerrarMovimento == NULL) {
+		_tprintf(_T("Erro ao criar o mutex de encerrar o movimento!\n"));
+		return FALSE;
+	}
+
 	//Criacao dos semaforos
 
 	//Semáforo para controlar as comunicações escritas
