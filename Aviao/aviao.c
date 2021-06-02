@@ -9,7 +9,8 @@
 #define NTHREADSMOVIMENTO 2
 #define MUTEX_MOVIMENTO_AVIOES _T("Mutex para a movimentacao dos avioes")
 #define MEMORIA_MOVIMENTO_AVIOES _T("Memoria para a movimentacao dos avioes")
-#define MUTEX_ENCERRAR_MOVIMENTO _T("Mutex para verificar o encerramento do movimento")
+#define MUTEX_INPUTS _T("Mutex dos Inputs")
+#define MUTEX_FLAG_SAIR _T("Mutex da flag de sair")
 //#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
 
 //Estrutura de mutexes, semaforos, etc para passar entre funções
@@ -25,6 +26,11 @@ typedef struct {
 } struct_memoria_mapa;
 
 typedef struct {
+	HANDLE eventoInput;
+	TCHAR com_total[TAM];
+} struct_input;
+
+typedef struct {
 	HANDLE objMapGeral;
 	HANDLE objMapParticular;
 	HANDLE objMapMapa;
@@ -35,22 +41,27 @@ typedef struct {
 	HANDLE mutexAviao;	
 	HANDLE mutexMovimentoAvioes;
 	HANDLE semafAvioesAtuais;
-	HANDLE mutexEncerrarMovimento;
+	HANDLE mutexInputs;
+	HANDLE mutexFlagSair;
 	struct_memoria_geral* ptrMemoriaGeral;
 	struct_memoria_particular* ptrMemoriaParticular;
 	struct_memoria_mapa* ptrMemoriaMapa;
 	struct_aviao eu;
 	int (*ptrmove)(int, int, int, int, int*, int*);
 	HMODULE hDLL;
+	struct_input input;
+	BOOL flagSair;
 } struct_util;
+
+
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Principal(LPVOID param);
 DWORD WINAPI VerificaEncerramentoControl(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
 DWORD WINAPI OpcaoEncerrar(LPVOID param);
-void MenuInicial(struct_util* util);
-void MenuSecundario(struct_util* util);
+BOOL MenuInicial(struct_util* util);
+BOOL MenuSecundario(struct_util* util);
 BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
 void FechaHandles(struct_util* util);
 BOOL InicializaUtil(struct_util* util);
@@ -166,34 +177,64 @@ DWORD WINAPI Principal(LPVOID param) {
 	struct_util* util = (struct_util*)param;
 	HANDLE hthreadsMovimento[NTHREADSMOVIMENTO];
 	int indiceParou = -1;
+	HANDLE threadEEvento[NTHREADSMOVIMENTO];
 
-	//do {
-		MenuInicial(util);
-		MenuSecundario(util);
+
+	util->input.eventoInput = CreateEvent(
+		NULL,            //LPSECURITY_ATTRIBUTES lpEventAttributes,
+		TRUE,            //BOOL bManualReset, reset MANUAL
+		FALSE,            //BOOL bInitialState, FALSE = bloqueante/não sinalizado
+		NULL            //LPCSTR lpName
+	); 
+	if (util->input.eventoInput == NULL) {
+		_tprintf(TEXT("Erro ao criar o evento de input\n"));
+		return -1;
+	}
+
+	hthreadsMovimento[0] = CreateThread(NULL, 0, OpcaoEncerrar, util, 0, NULL);
+	if (hthreadsMovimento[0] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
+		return -1;
+	}
+
+	do {
+		util->flagSair = MenuInicial(util);
+		if (util->flagSair == TRUE) {
+			break;
+		}
+		util->flagSair = MenuSecundario(util);
+		if (util->flagSair == TRUE) {
+			break;
+		}
 
 		//Criacao das Threads
-		hthreadsMovimento[0] = CreateThread(NULL, 0, Movimento, util, 0, NULL);
-		if (hthreadsMovimento[0] == NULL) {
+		hthreadsMovimento[1] = CreateThread(NULL, 0, Movimento, util, 0, NULL);
+		if (hthreadsMovimento[1] == NULL) {
 			_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
 			return -1;
 		}
-		hthreadsMovimento[1] = CreateThread(NULL, 0, OpcaoEncerrar, util, 0, NULL);
-		if (hthreadsMovimento[1] == NULL) {
-			_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
-			return -1;
+
+		threadEEvento[0] = util->input.eventoInput;
+		threadEEvento[1] = hthreadsMovimento[1];
+
+		indiceParou = WaitForMultipleObjects(NTHREADSMOVIMENTO,threadEEvento,FALSE,INFINITE);
+
+		indiceParou = indiceParou - WAIT_OBJECT_0;
+
+		if (indiceParou == 0) {
+			WaitForSingleObject(util->mutexFlagSair, INFINITE);
+			util->flagSair = TRUE;
+			ReleaseMutex(util->mutexFlagSair);
+			CloseHandle(hthreadsMovimento[1]);
+			break;
 		}
 
-		indiceParou = WaitForMultipleObjects(NTHREADSMOVIMENTO, hthreadsMovimento, FALSE, INFINITE);
+		CloseHandle(hthreadsMovimento[1]);
 
-		indiceParou = indiceParou - WAIT_OBJECT_0;		
+	} while (TRUE);
 
-		for (int i = 0; i < NTHREADSMOVIMENTO; i++) {
-			if (CloseHandle(hthreadsMovimento[i]) == 0) {
-				_tprintf(_T("ERRO! A thread não parou!\n"));
-			}
-		}
+	CloseHandle(hthreadsMovimento[0]);
 
-	//} while (indiceParou == 0);
 	return 0;
 }
 
@@ -235,6 +276,13 @@ DWORD WINAPI Movimento(LPVOID param) {
 		util->eu.pos_y = novo_y;
 		_tprintf(_T("Avancei para as coordenadas x: %d ,y: %d\n"), util->eu.pos_x, util->eu.pos_y);
 
+		WaitForSingleObject(util->mutexFlagSair, INFINITE);
+		if (util->flagSair == TRUE) {
+			_tprintf(_T("O Avião despenhou-se\n"));
+			ReleaseMutex(util->mutexFlagSair);
+			return 0;
+		}
+		ReleaseMutex(util->mutexFlagSair);
 		Sleep(espera);
 
 	} while (TRUE);
@@ -246,22 +294,14 @@ DWORD WINAPI OpcaoEncerrar(LPVOID param) {
 	com_total[0] = '\0';
 	struct_util* util = (struct_util*)param;
 	do {
-		_tprintf(_T("Encerrar (encerrar)\n"));
-		_tprintf(_T("Comando: "));
+		WaitForSingleObject(util->mutexInputs,INFINITE);
 		_fgetts(com_total, TAM, stdin);
 		com_total[_tcslen(com_total) - 1] = '\0';
-		if ((_tcscmp(com_total, _T("encerrar")) == 0)) {	
-			Encerra(util);
-			break;
-		}
-		/*WaitForSingleObject(util.mutexEncerraThread, INFINITE);
-		if (util->encerraThread == TRUE) {
-			break;
-		}
-		ReleaseMutex(util.mutexEncerraThread);*/
-	} while (TRUE);
-
-
+		_tcscpy_s(util->input.com_total, _countof(util->input.com_total), com_total);
+		SetEvent(util->input.eventoInput);
+		ReleaseMutex(util->mutexInputs);
+	} while ((_tcscmp(com_total, _T("encerrar")) != 0));
+	
 	return 0;
 }
 
@@ -341,11 +381,13 @@ void AlteraMinhasInformacoes(struct_util* util) {
 	util->eu.origem->pos_y = util->eu.destino->pos_y;
 	util->eu.pos_x = util->eu.origem->pos_x;
 	util->eu.pos_y = util->eu.origem->pos_y;
-	util->eu.destino = NULL;
+	_tcscpy_s(util->eu.destino->nome, _countof(util->eu.destino->nome), _T(""));
+	util->eu.destino->pos_x = -1;
+	util->eu.destino->pos_y = -1;
 }
 
 //Funções de Menus
-void MenuInicial(struct_util* util) {
+BOOL MenuInicial(struct_util* util) {
 
 	TCHAR com_total[TAM];
 	TCHAR com[TAM], arg1[TAM], arg2[TAM], arg3[TAM];
@@ -359,24 +401,26 @@ void MenuInicial(struct_util* util) {
 		arg3[0] = '\0';
 		cont = 0;
 		_tprintf(_T("\n--------------------------------------------\n"));
-		_tprintf(_T("Menu Principal\n"));
+		_tprintf(_T("\t\tMenu Principal\n"));
+		_tprintf(_T("Localização atual: %s\n"), util->eu.origem);
 		_tprintf(_T("\t-> Proximo Destino (destino <Aeroporto>)\n"));
 		_tprintf(_T("\t-> Encerrar (encerrar)\n"));
 		_tprintf(_T("Comando: "));
-		_fgetts(com_total, TAM, stdin);
-		com_total[_tcslen(com_total) - 1] = '\0';
+		WaitForSingleObject(util->mutexInputs, INFINITE);
+		WaitForSingleObject(util->input.eventoInput,INFINITE);
+		_tcscpy_s(com_total, _countof(com_total), util->input.com_total);
+		ResetEvent(util->input.eventoInput);
+		ReleaseMutex(util->mutexInputs);
 		cont = _stscanf_s(com_total, _T("%s %s %s %s"), com, (unsigned)_countof(com), arg1, (unsigned)_countof(arg1), arg2, (unsigned)_countof(arg2), arg3, (unsigned)_countof(arg3));
 		if (_tcscmp(com, _T("destino")) == 0 && cont == 2) {
 			if (ProximoDestino(util, arg1) == FALSE) {
 				continue;
 			}
-			return;
+			return FALSE;
 		}
 		else {
 			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
-				Encerra(util);
-				FechaHandles(util);
-				exit(0);
+				return TRUE;
 			}
 			else {
 				_tprintf(_T("Comando Inválido!!!!\n"));
@@ -384,10 +428,10 @@ void MenuInicial(struct_util* util) {
 		}
 
 	} while (TRUE);
-	return;
+	return FALSE;
 }
 
-void MenuSecundario(struct_util* util) {
+BOOL MenuSecundario(struct_util* util) {
 	TCHAR com_total[TAM];
 	TCHAR com[TAM], arg1[TAM], arg2[TAM], arg3[TAM];
 
@@ -404,17 +448,22 @@ void MenuSecundario(struct_util* util) {
 		_tprintf(_T("\t-> Descolar (descolar)\n"));
 		_tprintf(_T("\t-> Encerrar (encerrar)\n"));
 		_tprintf(_T("Comando: "));
-		_fgetts(com_total, TAM, stdin);
-		com_total[_tcslen(com_total) - 1] = '\0';
+
+		WaitForSingleObject(util->mutexInputs, INFINITE);
+		WaitForSingleObject(util->input.eventoInput, INFINITE);
+
+		_tcscpy_s(com_total, _countof(com_total), util->input.com_total);
+
+		ResetEvent(util->input.eventoInput);
+		ReleaseMutex(util->mutexInputs);
+
 		cont = _stscanf_s(com_total, _T("%s %s %s %s"), com, (unsigned)_countof(com), arg1, (unsigned)_countof(arg1), arg2, (unsigned)_countof(arg2), arg3, (unsigned)_countof(arg3));
 		if (_tcscmp(com, _T("descolar")) == 0 && cont == 1) {
-			return;
+			return FALSE;
 		}
 		else {
 			if (_tcscmp(com, _T("encerrar")) == 0 && cont == 1) {
-				Encerra(util);
-				FechaHandles(util);
-				exit(0);
+				return TRUE;
 			}
 			else
 			{
@@ -423,7 +472,7 @@ void MenuSecundario(struct_util* util) {
 		}
 
 	} while (TRUE);
-	return;
+	return FALSE;
 }
 
 //Funções do Registo
@@ -517,10 +566,17 @@ BOOL InicializaUtil(struct_util* util) {
 		return FALSE;
 	}
 
-	//mutex para verificar o encerramento do movimento
-	util->mutexEncerrarMovimento = CreateMutex(NULL, FALSE, MUTEX_ENCERRAR_MOVIMENTO);
-	if (util->mutexEncerrarMovimento == NULL) {
-		_tprintf(_T("Erro ao criar o mutex de encerrar o movimento!\n"));
+	//mutex para garantir que o control já inicializou a estrutura
+	util->mutexInputs = CreateMutex(NULL, FALSE, MUTEX_INPUTS);
+	if (util->mutexInputs == NULL) {
+		_tprintf(_T("Erro ao criar o mutex do movimento dos aviões!\n"));
+		return FALSE;
+	}
+
+	//mutex para a flag de sair
+	util->mutexFlagSair = CreateMutex(NULL, FALSE, MUTEX_FLAG_SAIR);
+	if (util->mutexFlagSair == NULL) {
+		_tprintf(_T("Erro ao criar o mutex da flag de sair!\n"));
 		return FALSE;
 	}
 
@@ -580,6 +636,10 @@ BOOL InicializaUtil(struct_util* util) {
 		_tprintf(_T("Erro ao criar o ptrMemoria do Mapa!\n"));
 		return FALSE;
 	}
+
+	//Flag para encerrar o Aviao
+	util->flagSair = FALSE;
+
 	return TRUE;
 }
 
@@ -595,6 +655,8 @@ void FechaHandles(struct_util* util) {
 	CloseHandle(util->mutexAviao);
 	CloseHandle(util->mutexMovimentoAvioes);
 	CloseHandle(util->objMapMapa);
+	CloseHandle(util->mutexInputs);
+	CloseHandle(util->input.eventoInput);
 	FreeLibrary(util->hDLL);
 	//CloseHandle(util->mutexEncerraThread);
 	
@@ -609,16 +671,12 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 	comunicacaoGeral.tipomsg = NOVO_DESTINO;
 	comunicacaoGeral.id_processo = util->eu.id_processo;
 	_tcscpy_s(comunicacaoGeral.nome_destino, _countof(comunicacaoGeral.nome_destino), destino);
-
 	WaitForSingleObject(util->semafLidos, INFINITE);
 	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
-
 	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
 	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
-
 	ReleaseMutex(util->mutexComunicacoesAvioes);
 	ReleaseSemaphore(util->semafEscritos, 1, NULL);
-
 	do {
 		WaitForSingleObject(util->mutexAviao, INFINITE);
 		CopyMemory(&comunicacaoParticular, &util->ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
@@ -629,7 +687,7 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 		_tprintf(_T("Erro! O destino inserido não é válido!\n"));
 		return FALSE;
 	}
-
+	
 	_tcscpy_s(util->eu.destino->nome, _countof(util->eu.destino->nome), destino);
 	util->eu.destino->pos_x = comunicacaoParticular.x_destino;
 	util->eu.destino->pos_y = comunicacaoParticular.y_destino;
