@@ -20,6 +20,8 @@ typedef struct {
 	HANDLE mutex_comunicacao;
 	HANDLE mutex_acede_avioes;
 	HANDLE mutex_acede_aeroportos;
+	HANDLE semafAvioesAtuais;
+	BOOL suspenso;
 } struct_dados;
 
 //Declaracao de Funcoes e Threads
@@ -34,6 +36,8 @@ void Lista(struct_dados* dados);
 int getIndiceAviao(int id_processo, struct_dados* dados);
 void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
 int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
+void suspendeAvioes(struct_dados* dados);
+void retomaAvioes(struct_dados* dados);
 
 
 int _tmain(int argc, TCHAR* argv[]) {
@@ -46,7 +50,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	
 	HANDLE hthreads[NTHREADS];
 	struct_dados dados;
-	HKEY chave; //Hanle para a chave depois de criada/aberta
+	HKEY chave; //Handle para a chave depois de criada/aberta
 	DWORD resultado_chave; //inteiro long, indica o que aconteceu à chave, se foi criada ou aberta ou não
 	TCHAR nome_chave[TAM] = _T("SOFTWARE\\TEMP\\TP_SO2"), nome_par_avioes[TAM] = _T("maxAvioes"),nome_par_aeroportos[TAM] = _T("maxAeroportos");
 	DWORD par_valor_avioes = 10, par_valor_aeroportos = 10;
@@ -55,6 +59,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	
 	dados.n_aeroportos_atuais = 0;
 	dados.n_avioes_atuais = 0;
+	dados.suspenso = FALSE;
 	
 	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
 	if (GetLastError() == ERROR_ALREADY_EXISTS) // did the mutex already exist?
@@ -78,6 +83,12 @@ int _tmain(int argc, TCHAR* argv[]) {
 	dados.mutex_acede_aeroportos = CreateMutex(NULL, FALSE, MUTEX_ACEDER_AEROPORTOS);
 	if (dados.mutex_acede_aeroportos == NULL) {
 		_tprintf(_T("Erro ao criar o mutex de aceder aos aeroportos!\n"));
+		return -1;
+	}
+
+	dados.semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
+	if (dados.semafAvioesAtuais == NULL) {
+		_tprintf(_T("Erro ao criar o semáforo dos avioes atuais!\n"));
 		return -1;
 	}
 
@@ -150,6 +161,10 @@ int _tmain(int argc, TCHAR* argv[]) {
 	}
 
 	RegCloseKey(chave);
+	CloseHandle(dados.mutex_comunicacao);
+	CloseHandle(dados.mutex_acede_aeroportos);
+	CloseHandle(dados.mutex_acede_avioes);
+	CloseHandle(dados.semafAvioesAtuais);
 
 	return 0;
 }
@@ -187,7 +202,26 @@ DWORD WINAPI Menu(LPVOID param) {
 		}
 		else {
 			if (_tcscmp(com, _T("suspender")) == 0 && cont == 2) {
-
+				if (_tcscmp(arg1, _T("on")) == 0) {
+					if (dados->suspenso == FALSE) {
+						dados->suspenso = TRUE;
+						suspendeAvioes(dados);
+						_tprintf(_T("Suspensão de aviões ligada\n"));
+					}
+					else {
+						_tprintf(_T("O registo já se encontra suspenso\n"));
+					}
+				}
+				else if(_tcscmp(arg1, _T("off")) == 0) {
+					if (dados->suspenso == TRUE) {
+						dados->suspenso = FALSE;
+						retomaAvioes(dados);
+						_tprintf(_T("Suspensão de aviões desligada\n"));
+					}
+					else {
+						_tprintf(_T("O registo não se encontra suspenso\n"));
+					}
+				}
 			}
 			else {
 				if (_tcscmp(com, _T("lista")) == 0) {
@@ -533,6 +567,20 @@ void Lista(struct_dados* dados) {
 	}
 	ReleaseMutex(dados->mutex_acede_aeroportos);
 	ReleaseMutex(dados->mutex_acede_avioes);
+}
+
+void suspendeAvioes(struct_dados* dados) {
+	int cont = MAX_AVIOES - dados->n_avioes_atuais;
+
+	for (int i = 0; i < cont; i++) {
+		WaitForSingleObject(dados->semafAvioesAtuais, INFINITE);
+	}
+}
+
+void retomaAvioes(struct_dados* dados) {
+	int cont = MAX_AVIOES - dados->n_avioes_atuais;
+
+	ReleaseSemaphore(dados->semafAvioesAtuais, cont, NULL);
 }
 
 
