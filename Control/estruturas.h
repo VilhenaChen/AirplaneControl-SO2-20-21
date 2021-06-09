@@ -11,6 +11,7 @@
 #define TAM_MAP 1000
 #define MAX_AVIOES 10
 #define MAX_AEROPORTOS 10
+#define MAX_PASSAGEIROS 200
 
 //DEFINES PARA NOMES DE MUTEXES, SEMAFOROS, ETC.
 #define MEMORIA_CONTROL _T("Memoria Control")
@@ -22,6 +23,7 @@
 #define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes") // Bloqueio da escrita dos avioes para o control quando um esta a escrever
 #define EVENTO_ENCERRA_CONTROL _T("Evento encerra Control")
+#define MUTEX_PASSAGEIROS _T("Mutex dos Passageiros")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
@@ -42,6 +44,7 @@ typedef struct {
 	TCHAR nome[TAM];
 	int pos_x;
 	int pos_y;
+	int passageiros_atuais;
 } struct_aeroporto;
 
 typedef struct {
@@ -54,6 +57,13 @@ typedef struct {
 	struct_aeroporto* destino;
 } struct_aviao;
 
+typedef struct {	
+	TCHAR nome[TAM];
+	int tempo_espera;
+	struct_aeroporto* origem;
+	struct_aeroporto* destino;
+	struct_aviao* aviao;
+} struct_passageiro; 
 
 typedef struct {
 	TCHAR nome_origem[TAM];
@@ -85,6 +95,8 @@ typedef struct {
 	int out;
 	int nrAvioes;
 } struct_memoria_geral; //Resposta Aviao -> Control
+
+
 
 
 

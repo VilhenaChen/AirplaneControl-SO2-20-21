@@ -13,14 +13,17 @@
 typedef struct {
 	struct_aeroporto aeroportos[MAX_AEROPORTOS];
 	struct_aviao avioes[MAX_AVIOES];
+	struct_passageiro passageiros[MAX_PASSAGEIROS];
 	//struct_memoria_geral* ptrMemoriaGeral;
 	//HANDLE objMapGeral;
 	int n_aeroportos_atuais;
 	int n_avioes_atuais;
+	int n_passageiros_atuais;
 	HANDLE mutex_comunicacao;
 	HANDLE mutex_acede_avioes;
 	HANDLE mutex_acede_aeroportos;
 	HANDLE semafAvioesAtuais;
+	HANDLE mutex_acede_passageiros;
 	BOOL suspenso;
 } struct_dados;
 
@@ -32,6 +35,7 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void EliminaAviao(struct_dados* dados, int idProcesso);
+void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera);
 void Lista(struct_dados* dados);
 int getIndiceAviao(int id_processo, struct_dados* dados);
 void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
@@ -60,6 +64,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	
 	dados.n_aeroportos_atuais = 0;
 	dados.n_avioes_atuais = 0;
+	dados.n_passageiros_atuais = 0;
 	dados.suspenso = FALSE;
 	
 	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
@@ -90,6 +95,12 @@ int _tmain(int argc, TCHAR* argv[]) {
 	dados.semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
 	if (dados.semafAvioesAtuais == NULL) {
 		_tprintf(_T("Erro ao criar o semáforo dos avioes atuais!\n"));
+		return -1;
+	}
+
+	dados.mutex_acede_passageiros = CreateMutex(NULL, FALSE, MUTEX_PASSAGEIROS);
+	if(dados.mutex_acede_passageiros == NULL) {
+		_tprintf(_T("Erro ao criar o mutex de aceder aos passageiros!\n"));
 		return -1;
 	}
 
@@ -166,7 +177,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 	CloseHandle(dados.mutex_acede_aeroportos);
 	CloseHandle(dados.mutex_acede_avioes);
 	CloseHandle(dados.semafAvioesAtuais);
-
 	return 0;
 }
 
@@ -467,6 +477,7 @@ BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados) {
 		_tcscpy_s(dados->aeroportos[dados->n_aeroportos_atuais].nome, _countof(dados->aeroportos[dados->n_aeroportos_atuais].nome), nome);
 		dados->aeroportos[dados->n_aeroportos_atuais].pos_x = x;
 		dados->aeroportos[dados->n_aeroportos_atuais].pos_y = y;
+		dados->aeroportos[dados->n_aeroportos_atuais].passageiros_atuais = 0;
 		dados->n_aeroportos_atuais++;
 		return TRUE;
 	}
@@ -544,6 +555,15 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 	}
 	n_avioes--;
 	dados->n_avioes_atuais = n_avioes;
+}
+
+void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera) {
+	WaitForSingleObject(dados->mutex_acede_passageiros, INFINITE);
+	_tsccpy_s(dados->passageiros[dados->n_passageiros_atuais].nome, _countof(dados->passageiros[dados->n_passageiros_atuais].nome), nome);
+	dados->passageiros[dados->n_passageiros_atuais].aviao = NULL;
+	dados->passageiros[dados->n_passageiros_atuais].origem = &dados->aeroportos[getIndiceAeroporto(dados, origem)];
+	dados->passageiros[dados->n_passageiros_atuais].destino = &dados->aeroportos[getIndiceAeroporto(dados, destino)];
+	dados->n_passageiros_atuais++;
 }
 
 //Funções lista
