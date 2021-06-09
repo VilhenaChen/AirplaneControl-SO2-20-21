@@ -38,6 +38,7 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
 void suspendeAvioes(struct_dados* dados);
 void retomaAvioes(struct_dados* dados);
+void encerrar(struct_dados* dados);
 
 
 int _tmain(int argc, TCHAR* argv[]) {
@@ -229,6 +230,7 @@ DWORD WINAPI Menu(LPVOID param) {
 				}
 				else {
 					if (_tcscmp(com, _T("encerrar")) == 0) {
+						encerrar(dados);
 						return 0;
 					}
 					else {
@@ -581,6 +583,22 @@ void retomaAvioes(struct_dados* dados) {
 	int cont = MAX_AVIOES - dados->n_avioes_atuais;
 
 	ReleaseSemaphore(dados->semafAvioesAtuais, cont, NULL);
+}
+
+void encerrar(struct_dados* dados) {
+	HANDLE eventoEncerraControl = CreateEvent(
+		NULL,            //LPSECURITY_ATTRIBUTES lpEventAttributes,
+		TRUE,            //BOOL bManualReset, reset MANUAL
+		FALSE,            //BOOL bInitialState, FALSE = bloqueante/não sinalizado
+		EVENTO_ENCERRA_CONTROL              //LPCSTR lpName
+	);
+	if (eventoEncerraControl == NULL) {
+		_tprintf(TEXT("Erro ao criar o evento de encerrar\n"));
+		return -1;
+	}
+
+	SetEvent(eventoEncerraControl);
+	CloseHandle(eventoEncerraControl);
 }
 
 

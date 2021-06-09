@@ -86,7 +86,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	struct_util util;
 	util.eu.origem = &origem;
 	util.eu.destino = &destino;
-	//int indiceThread;
+	int indiceThread;
 
 	//Verificar se o Control já está a correr
 	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
@@ -159,14 +159,17 @@ int _tmain(int argc, TCHAR* argv[]) {
 		return -1;
 	}
 
-	WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
+	indiceThread = WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
 	
+	indiceThread = indiceThread - WAIT_OBJECT_0;
+
 	for (int i = 0; i < NTHREADSPRINCIPAIS; i++) {
 		CloseHandle(hthreadsPrincipais[i]);
 	}
 
-	Encerra(&util);
-
+	if (indiceThread != 1) {
+		Encerra(&util);
+	}
 	FechaHandles(&util);
 	
 }
@@ -206,7 +209,6 @@ DWORD WINAPI Principal(LPVOID param) {
 		if (util->flagSair == TRUE) {
 			break;
 		}
-
 		//Criacao das Threads
 		hthreadsMovimento[1] = CreateThread(NULL, 0, Movimento, util, 0, NULL);
 		if (hthreadsMovimento[1] == NULL) {
@@ -308,9 +310,19 @@ DWORD WINAPI OpcaoEncerrar(LPVOID param) {
 
 
 DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
-	do {
-		Sleep(10000);
-	} while (TRUE);
+	struct_util* util = (struct_util*)param;
+	HANDLE eventoEncerraControl = CreateEvent(
+		NULL,            //LPSECURITY_ATTRIBUTES lpEventAttributes,
+		TRUE,            //BOOL bManualReset, reset MANUAL
+		FALSE,            //BOOL bInitialState, FALSE = bloqueante/não sinalizado
+		EVENTO_ENCERRA_CONTROL          //LPCSTR lpName
+	);
+	if (eventoEncerraControl == NULL) {
+		_tprintf(TEXT("Erro ao criar o evento de encerrar\n"));
+		return -1;
+	}
+	WaitForSingleObject(eventoEncerraControl, INFINITE);
+	CloseHandle(eventoEncerraControl);
 	return 0;
 }
 

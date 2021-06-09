@@ -21,6 +21,7 @@
 #define SEMAFORO_AVIOES_ATIVOS _T("Semaforo dos Avioes Ativos")
 #define MUTEX_COMUNICACAO_CONTROL _T("Mutex da Primeira Comunicacao Control")
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes") // Bloqueio da escrita dos avioes para o control quando um esta a escrever
+#define EVENTO_ENCERRA_CONTROL _T("Evento encerra Control")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
