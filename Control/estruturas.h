@@ -24,6 +24,8 @@
 #define MUTEX_COMUNICACAO_AVIAO _T("Mutex das Comunicacoes dos Avioes") // Bloqueio da escrita dos avioes para o control quando um esta a escrever
 #define EVENTO_ENCERRA_CONTROL _T("Evento encerra Control")
 #define MUTEX_PASSAGEIROS _T("Mutex dos Passageiros")
+#define MUTEX_PIPE_CONTROL _T("Mutex Pipe Control")
+#define MUTEX_PIPE_PASSAGEIRO _T("Mutex Pipe Passageiro")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
@@ -37,7 +39,21 @@
 #define AVIAO_RECUSADO 2
 #define DESTINO_VERIFICADO 3
 #define DESTINO_REJEITADO 4
-#define ENCERRAR_CONTROLADOR 5
+
+//NOMES DOS PIPES
+#define PIPE_CONTROL_GERAL _T("\\\\.\\pipe\\control")
+#define PIPE_PASSAG_PARTICULAR _T("\\\\.\\pipe\\passag_%d")
+
+
+//DEFINES PARA TIPOS DE MENSAGENS PASSAGEIRO-CONTROL
+#define NOVO_PASSAGEIRO 1
+#define ENCERRAR_PASSAGEIRO 2
+
+//DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-PASSAGEIRO
+#define PASSAGEIRO_ACEITE 1
+#define PASSAGEIRO_RECUSADO 2
+#define NOVA_COORDENADA 3
+#define AVIAO_DESPENHOU 4
 
 
 typedef struct {
@@ -63,7 +79,27 @@ typedef struct {
 	struct_aeroporto* origem;
 	struct_aeroporto* destino;
 	struct_aviao* aviao;
+	int id_processo;
 } struct_passageiro; 
+
+typedef struct {
+	int tipo;
+	int x_origem;
+	int y_origem;
+	int x_destino;
+	int y_destino;
+	int x_atual;
+	int y_atual;
+} struct_msg_control_passageiro;
+
+typedef struct {
+	int tipo;
+	int id_processo;
+	int tempo_espera;
+	TCHAR origem[TAM];
+	TCHAR destino[TAM];
+	TCHAR nome[TAM];
+} struct_msg_passageiro_control;
 
 typedef struct {
 	TCHAR nome_origem[TAM];

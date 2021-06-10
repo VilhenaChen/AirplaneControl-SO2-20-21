@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include "estruturas.h"
-#define NTHREADS 2
+#define NTHREADS 3
 #define MUTEX_ACEDER_AVIOES _T("Mutex para aceder a estrutura dos avioes")
 #define MUTEX_ACEDER_AEROPORTOS _T("Mutex para aceder a estrutura dos aeroportos")
 
@@ -25,11 +25,15 @@ typedef struct {
 	HANDLE semafAvioesAtuais;
 	HANDLE mutex_acede_passageiros;
 	BOOL suspenso;
+	HANDLE mutex_meu_pipe;
+	HANDLE hPipePassageiro;
+	HANDLE hMeuPipe;
 } struct_dados;
 
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Menu(LPVOID param);
-DWORD WINAPI Comunicacao(LPVOID param);
+DWORD WINAPI ComunicacaoAviao(LPVOID param);
+DWORD WINAPI ComunicacaoPassageiro(LPVOID param);
 BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
@@ -160,10 +164,15 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread do menu!\n"));
 		return -1; 
 	}
-	hthreads[1] = CreateThread(NULL, 0, Comunicacao, &dados, 0, NULL);
+	hthreads[1] = CreateThread(NULL, 0, ComunicacaoAviao, &dados, 0, NULL);
 	if (hthreads[0] == NULL) {
-		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação do Avião!\n"));
 		return -1; 
+	}
+	hthreads[2] = CreateThread(NULL, 0, ComunicacaoPassageiro, &dados, 0, NULL);
+	if (hthreads[2] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação do Passageiro!\n"));
+		return -1;
 	}
 
 	WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
@@ -264,7 +273,7 @@ DWORD WINAPI Menu(LPVOID param) {
 }
 
 //Thread Comunicação
-DWORD WINAPI Comunicacao(LPVOID param) {
+DWORD WINAPI ComunicacaoAviao(LPVOID param) {
 	int id_aviao = 0;
 	struct_dados* dados = (struct_dados*) param;
 	struct_memoria_geral* ptrMemoriaGeral;
@@ -327,6 +336,55 @@ DWORD WINAPI Comunicacao(LPVOID param) {
 	CloseHandle(objMapGeral);
 	CloseHandle(semafEscritos);
 	CloseHandle(semafLidos);
+	
+}
+
+DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
+	struct_dados* dados = (struct_dados*)param;
+	//TCHAR buffer[256];
+	BOOL retorno;
+	DWORD n;
+	struct_msg_passageiro_control mensagemLida;
+	struct_msg_control_passageiro mensagemEscrita;
+	dados->mutex_meu_pipe = CreateMutex(NULL, FALSE, MUTEX_PIPE_CONTROL);
+	if (dados->mutex_meu_pipe == NULL) {
+		_tprintf(_T("Erro ao criar o mutex do meu pipe!\n"));
+		return -1;
+	}
+	dados->hMeuPipe = CreateNamedPipe(PIPE_CONTROL_GERAL, PIPE_ACCESS_INBOUND, PIPE_WAIT |
+		PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1,
+		sizeof(struct_msg_passageiro_control), sizeof(struct_msg_passageiro_control), 1000, NULL);
+	if (dados->hMeuPipe == INVALID_HANDLE_VALUE) {
+		//_tprintf(TEXT("[ERRO] Criar Named Pipe! (CreateNamedPipe)"));
+		_tprintf(TEXT("CreateNamedPipe failed, GLE=%d.\n"), GetLastError());
+		exit(-1);
+	}
+	while (1) {
+		_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
+		if (!ConnectNamedPipe(dados->hMeuPipe, NULL)) {
+			_tprintf(TEXT("[ERRO] Ligação ao leitor! (ConnectNamedPipe\n"));
+			exit(-1);
+		}
+		retorno = ReadFile(dados->hMeuPipe, &mensagemLida, sizeof(struct_msg_passageiro_control), &n, NULL);
+		if (!retorno || !n) {
+			_tprintf(TEXT("[Control] %d %d... (ReadFile)\n"), retorno, n);
+			break;
+		}
+		_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
+
+		//separar buffer
+		//adicionar passageiro
+		//responder a passageiro
+
+
+
+		_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
+		if (!DisconnectNamedPipe(dados->hMeuPipe)) {
+			_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
+			exit(-1);
+		}
+	}
+
 	return 0;
 }
 
@@ -559,7 +617,7 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 
 void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera) {
 	WaitForSingleObject(dados->mutex_acede_passageiros, INFINITE);
-	_tsccpy_s(dados->passageiros[dados->n_passageiros_atuais].nome, _countof(dados->passageiros[dados->n_passageiros_atuais].nome), nome);
+	_tcscpy_s(dados->passageiros[dados->n_passageiros_atuais].nome, _countof(dados->passageiros[dados->n_passageiros_atuais].nome), nome);
 	dados->passageiros[dados->n_passageiros_atuais].aviao = NULL;
 	dados->passageiros[dados->n_passageiros_atuais].origem = &dados->aeroportos[getIndiceAeroporto(dados, origem)];
 	dados->passageiros[dados->n_passageiros_atuais].destino = &dados->aeroportos[getIndiceAeroporto(dados, destino)];
