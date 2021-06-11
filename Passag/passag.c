@@ -27,6 +27,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	_setmode(_fileno(stdout), _O_WTEXT);
 	_setmode(_fileno(stderr), _O_WTEXT);
 #endif
+
 	// recebe origem destino nome tempo_espera(opcional)
 	// Encerra quando chegar ao destino ou quando passar o tempo maximo para embarque
 	// Pode desligar-se a qualquer momento, deixando de existir
@@ -35,14 +36,13 @@ int _tmain(int argc, TCHAR* argv[]) {
 	struct_dados dados;
 	struct_aeroporto origem;
 	struct_aeroporto destino;
+	TCHAR nomePipe[TAM];
 	int indiceThread;
-	_tprintf(_T("aqui1\n"));
 	//Verificar se os argumentos estão a ser passados de forma correta
 	if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL) {
 		_tprintf(_T("ERRO! Não foram passados os argumentos necessários ao lançamento do Passageiro!\n"));
 		return -1; // quit; mutex is released automatically
 	}
-	_tprintf(_T("aqui2\n"));
 	dados.eu.aviao = NULL;
 	dados.eu.id_processo = GetCurrentProcessId();
 	dados.eu.origem = &origem;
@@ -54,7 +54,17 @@ int _tmain(int argc, TCHAR* argv[]) {
 	if (argv[4] != NULL) {
 		dados.eu.tempo_espera = _tstoi(argv[4]);
 	}
-	_tprintf(_T("aqui3\n"));
+
+	_stprintf_s(nomePipe, _countof(nomePipe), PIPE_PASSAG_PARTICULAR, dados.eu.id_processo);
+	dados.hMeuPipe = CreateNamedPipe(nomePipe, PIPE_ACCESS_INBOUND, PIPE_WAIT |PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1,
+		sizeof(struct_msg_control_passageiro), sizeof(struct_msg_control_passageiro), 1000, NULL);
+	
+	if (dados.hMeuPipe == INVALID_HANDLE_VALUE) {
+		//_tprintf(TEXT("[ERRO] Criar Named Pipe! (CreateNamedPipe)"));
+		_tprintf(TEXT("CreateNamedPipe failed, GLE=%d.\n"), GetLastError());
+		exit(-1);
+	}
+
 	Registo(&dados);
 	//Criacao das Threads
 	hthreadsPrincipais[0] = CreateThread(NULL, 0, Principal, &dados, 0, NULL);
@@ -67,7 +77,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Verificação do Encerramento do Control!\n"));
 		return -1;
 	}
-	_tprintf(_T("aqui4\n"));
 	indiceThread = WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
 
 	indiceThread = indiceThread - WAIT_OBJECT_0;
@@ -105,20 +114,21 @@ DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
 
 //Funções do Registo
 BOOL Registo(struct_dados* dados) {
-	//TCHAR buffer[256];
 	DWORD n;
 	struct_msg_passageiro_control mensagemEscrita;
 	struct_msg_control_passageiro mensagemLida;
-	//_stprintf_s(buffer,countof(buffer), "%d %s %s %s %d", dados->eu.id_processo, dados->eu.nome, dados->eu.origem->nome, dados->eu.destino->nome, dados->eu.tempo_espera);
+	BOOL retorno;
+
+	//preenchimento mensagem escrita
 	mensagemEscrita.tipo = NOVO_PASSAGEIRO;
 	_tcscpy_s(mensagemEscrita.nome, _countof(mensagemEscrita.nome), dados->eu.nome);
 	_tcscpy_s(mensagemEscrita.origem, _countof(mensagemEscrita.origem), dados->eu.origem->nome);
 	_tcscpy_s(mensagemEscrita.destino, _countof(mensagemEscrita.destino), dados->eu.destino->nome);
 	mensagemEscrita.id_processo = dados->eu.id_processo;
 	mensagemEscrita.tempo_espera = dados->eu.tempo_espera;
-	_tprintf(_T("aqui6\n"));
-	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n")
-		PIPE_CONTROL_GERAL);
+
+	//ligação named pipe control e escrita para o mesmo
+	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
 	if (!WaitNamedPipe(PIPE_CONTROL_GERAL, NMPWAIT_WAIT_FOREVER)) {
 		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
 		exit(-1);
@@ -137,6 +147,27 @@ BOOL Registo(struct_dados* dados) {
 		_tprintf(TEXT("[ERRO] Escrever no pipe! (WriteFile)\n"));
 		exit(-1);
 	}
+	
+	//criação e leitura do pipe do passageiro
+	_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
+	if (!ConnectNamedPipe(dados->hMeuPipe, NULL)) {
+		_tprintf(TEXT("[ERRO] Ligação ao leitor! (ConnectNamedPipe\n"));
+		exit(-1);
+	}
+	retorno = ReadFile(dados->hMeuPipe, &mensagemLida, sizeof(struct_msg_control_passageiro), &n, NULL);
+	if (!retorno || !n) {
+		_tprintf(TEXT("[Passageiro] %d %d... (ReadFile)\n"), retorno, n);
+		return FALSE;
+	}
+	_tprintf(TEXT("[Passageiro] Recebi %d bytes: '%d'... (ReadFile)\n"), n, mensagemLida.tipo);
+
+
+	_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
+	if (!DisconnectNamedPipe(dados->hMeuPipe)) {
+		_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
+		exit(-1);
+	}
+
 	CloseHandle(dados->hPipeControl);
 
 	return TRUE;

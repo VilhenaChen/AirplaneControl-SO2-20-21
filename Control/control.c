@@ -40,6 +40,8 @@ BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void EliminaAviao(struct_dados* dados, int idProcesso);
 void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera);
+void PreencheResposta(struct_dados* dados,struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso);
+BOOL RespondeAoPassageiro(struct_dados* dados, struct_msg_control_passageiro* msg, int idProcesso);
 void Lista(struct_dados* dados);
 int getIndiceAviao(int id_processo, struct_dados* dados);
 void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
@@ -371,12 +373,12 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 			break;
 		}
 		_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
-
-		//separar buffer
+		InserePassageiro(dados,mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera);
+		int tipo_resposta = PASSAGEIRO_ACEITE;
+		PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
+		RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
 		//adicionar passageiro
 		//responder a passageiro
-
-
 
 		_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
 		if (!DisconnectNamedPipe(dados->hMeuPipe)) {
@@ -615,6 +617,7 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 	dados->n_avioes_atuais = n_avioes;
 }
 
+//Funcoes dos Passageiros
 void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera) {
 	WaitForSingleObject(dados->mutex_acede_passageiros, INFINITE);
 	_tcscpy_s(dados->passageiros[dados->n_passageiros_atuais].nome, _countof(dados->passageiros[dados->n_passageiros_atuais].nome), nome);
@@ -623,6 +626,42 @@ void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM]
 	dados->passageiros[dados->n_passageiros_atuais].destino = &dados->aeroportos[getIndiceAeroporto(dados, destino)];
 	dados->n_passageiros_atuais++;
 }
+
+void PreencheResposta(struct_dados* dados, struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso) {
+	msgControl->tipo = tipoResposta;
+}
+
+BOOL RespondeAoPassageiro(struct_dados* dados, struct_msg_control_passageiro* msg, int idProcesso) {
+	DWORD n;
+	TCHAR nomePipe[TAM];
+	HANDLE pipePassag;
+	_stprintf_s(nomePipe, _countof(nomePipe), PIPE_PASSAG_PARTICULAR, idProcesso);
+
+	//ligação named pipe control e escrita para o mesmo
+	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_PASSAG_PARTICULAR);
+	if (!WaitNamedPipe(nomePipe, NMPWAIT_WAIT_FOREVER)) {
+		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (WaitNamedPipe)\n"), PIPE_PASSAG_PARTICULAR);
+		exit(-1);
+	}
+
+	_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
+	pipePassag = CreateFile(nomePipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, NULL);
+	if (pipePassag == NULL) {
+		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (CreateFile)\n"), PIPE_PASSAG_PARTICULAR);
+		exit(-1);
+	}
+	_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
+
+	if (!WriteFile(pipePassag, msg, sizeof(struct_msg_control_passageiro), &n, NULL)) {
+		_tprintf(TEXT("[ERRO] Escrever no pipe! (WriteFile)\n"));
+		exit(-1);
+	}
+
+	CloseHandle(pipePassag);
+
+}
+
 
 //Funções lista
 void Lista(struct_dados* dados) {
@@ -663,6 +702,7 @@ void retomaAvioes(struct_dados* dados) {
 	ReleaseSemaphore(dados->semafAvioesAtuais, cont, NULL);
 }
 
+//Funcao de encerrar o control
 void encerrar(struct_dados* dados) {
 	HANDLE eventoEncerraControl = CreateEvent(
 		NULL,            //LPSECURITY_ATTRIBUTES lpEventAttributes,
