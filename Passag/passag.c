@@ -84,7 +84,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	for (int i = 0; i < NTHREADSPRINCIPAIS; i++) {
 		CloseHandle(hthreadsPrincipais[i]);
 	}
-
+	CloseHandle(dados.hMeuPipe);
 	return 0;
 }
 
@@ -167,8 +167,24 @@ BOOL Registo(struct_dados* dados) {
 		_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
 		exit(-1);
 	}
-
 	CloseHandle(dados->hPipeControl);
-
+	if (mensagemLida.tipo == PASSAGEIRO_RECUSADO) {
+		//Talvez meter o pq de ter sido recusado
+		_tprintf(_T("Passageiro recusado pelo controlador!!\n"));
+		CloseHandle(dados->hMeuPipe);
+		exit(-1);
+	}
+	else {
+		dados->eu.origem->pos_x = mensagemLida.x_origem;
+		dados->eu.origem->pos_y = mensagemLida.y_origem;
+		dados->eu.destino->pos_x = mensagemLida.x_destino;
+		dados->eu.destino->pos_y = mensagemLida.y_destino;
+	}
+	_tprintf(_T("Informações do Passageiro:\n"));
+	_tprintf(_T("\tNome: %s\n"),dados->eu.nome);
+	_tprintf(_T("\tOrigem: %s\n"), dados->eu.origem->nome);
+	_tprintf(_T("\t\tx: %d  y: %d\n"), dados->eu.origem->pos_x, dados->eu.origem->pos_y);
+	_tprintf(_T("\tDestino: %s\n"), dados->eu.destino->nome);
+	_tprintf(_T("\t\tx: %d  y: %d\n"), dados->eu.destino->pos_x, dados->eu.destino->pos_y);
 	return TRUE;
 }

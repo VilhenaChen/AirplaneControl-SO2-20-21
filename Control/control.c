@@ -39,13 +39,15 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void EliminaAviao(struct_dados* dados, int idProcesso);
-void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera);
+void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera, int idProcesso);
 void PreencheResposta(struct_dados* dados,struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso);
+BOOL VerificaPassageiroAceite(struct_dados* dados, struct_msg_passageiro_control* msg);
 BOOL RespondeAoPassageiro(struct_dados* dados, struct_msg_control_passageiro* msg, int idProcesso);
 void Lista(struct_dados* dados);
 int getIndiceAviao(int id_processo, struct_dados* dados);
 void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, struct_aviao_com* comunicacaoGeral, struct_controlador_com* comunicacaoParticular);
 int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
+int getIndicePassageiro(struct_dados* dados, int idProcesso);
 void suspendeAvioes(struct_dados* dados);
 void retomaAvioes(struct_dados* dados);
 void encerrar(struct_dados* dados);
@@ -348,6 +350,7 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 	DWORD n;
 	struct_msg_passageiro_control mensagemLida;
 	struct_msg_control_passageiro mensagemEscrita;
+	int tipo_resposta;
 	dados->mutex_meu_pipe = CreateMutex(NULL, FALSE, MUTEX_PIPE_CONTROL);
 	if (dados->mutex_meu_pipe == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do meu pipe!\n"));
@@ -373,13 +376,19 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 			break;
 		}
 		_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
-		InserePassageiro(dados,mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera);
-		int tipo_resposta = PASSAGEIRO_ACEITE;
+		if (VerificaPassageiroAceite(dados, &mensagemLida)) {
+			_tprintf(_T("Foi Aceite!"));
+			InserePassageiro(dados, mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera, mensagemLida.id_processo);
+			_tprintf(_T("Foi Inserido!"));
+			tipo_resposta = PASSAGEIRO_ACEITE;
+		}
+		else {
+			tipo_resposta = PASSAGEIRO_RECUSADO;
+		}
 		PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
+		_tprintf(_T("Foi Preenchida a resposta!"));
 		RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
-		//adicionar passageiro
-		//responder a passageiro
-
+		_tprintf(_T("Foi Respondido ao Passageiro!"));
 		_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
 		if (!DisconnectNamedPipe(dados->hMeuPipe)) {
 			_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
@@ -553,6 +562,17 @@ int getIndiceAeroporto(struct_dados* dados,  TCHAR aeroporto[]) {
 	return -1;
 }
 
+int getIndicePassageiro(struct_dados* dados, int idProcesso) {
+	for (int i = 0; i < dados->n_passageiros_atuais; i++) {
+		if (dados->passageiros[i].id_processo==idProcesso) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+
+
 //Funções dos Avioes
 int getIndiceAviao(int id_processo, struct_dados* dados) {
 	for (int i = 0; i < dados->n_avioes_atuais; i++) {
@@ -618,17 +638,43 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 }
 
 //Funcoes dos Passageiros
-void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera) {
+void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera, int idProcesso) {
 	WaitForSingleObject(dados->mutex_acede_passageiros, INFINITE);
 	_tcscpy_s(dados->passageiros[dados->n_passageiros_atuais].nome, _countof(dados->passageiros[dados->n_passageiros_atuais].nome), nome);
 	dados->passageiros[dados->n_passageiros_atuais].aviao = NULL;
+	dados->passageiros[dados->n_passageiros_atuais].id_processo = idProcesso;
 	dados->passageiros[dados->n_passageiros_atuais].origem = &dados->aeroportos[getIndiceAeroporto(dados, origem)];
 	dados->passageiros[dados->n_passageiros_atuais].destino = &dados->aeroportos[getIndiceAeroporto(dados, destino)];
+
 	dados->n_passageiros_atuais++;
 }
 
-void PreencheResposta(struct_dados* dados, struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso) {
+void PreencheResposta(struct_dados* dados, struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso) {	
 	msgControl->tipo = tipoResposta;
+	switch (tipoResposta) {
+		case PASSAGEIRO_RECUSADO:
+			break;
+		case PASSAGEIRO_ACEITE:
+			_tprintf(_T("aquiiiiii\n"));
+			msgControl->x_origem=dados->passageiros[getIndicePassageiro(dados,idProcesso)].origem->pos_x;
+			msgControl->y_origem=dados->passageiros[getIndicePassageiro(dados,idProcesso)].origem->pos_y;
+			msgControl->x_destino=dados->passageiros[getIndicePassageiro(dados,idProcesso)].destino->pos_x;
+			msgControl->y_destino=dados->passageiros[getIndicePassageiro(dados,idProcesso)].destino->pos_y;
+			break;
+		case NOVA_COORDENADA:
+			msgControl->x_atual = dados->passageiros[getIndicePassageiro(dados, idProcesso)].aviao->pos_x;
+			msgControl->y_atual = dados->passageiros[getIndicePassageiro(dados, idProcesso)].aviao->pos_y;
+			break;
+		case AVIAO_DESPENHOU:
+			break;
+	}
+}
+
+BOOL VerificaPassageiroAceite(struct_dados* dados, struct_msg_passageiro_control* msg) {
+	if (getIndiceAeroporto(dados,msg->origem) == -1 || getIndiceAeroporto(dados, msg->destino) == -1) {
+		return FALSE;
+	}
+	return TRUE;
 }
 
 BOOL RespondeAoPassageiro(struct_dados* dados, struct_msg_control_passageiro* msg, int idProcesso) {
@@ -683,6 +729,17 @@ void Lista(struct_dados* dados) {
 		}
 		_tprintf(_T("\tPosição Atual: x: %d\t y: %d\n"), dados->avioes[i].pos_x, dados->avioes[i].pos_y);
 		_tprintf(_T("\tVelocidade: %d\n"), dados->avioes[i].velocidade);
+	}
+	_tprintf(_T("Lista de Passageiros\n"));
+	for (int i = 0; i < dados->n_passageiros_atuais; i++) {
+		_tprintf(_T("Passageiro %d\n"), i);
+		_tprintf(_T("\tNome: %s\n"), dados->passageiros[i].nome);
+		_tprintf(_T("\tOrigem: %s\n"), dados->passageiros[i].origem);
+		_tprintf(_T("\tDestino: %s\n"), dados->passageiros[i].destino);
+		if (dados->passageiros->aviao != NULL) {
+			_tprintf(_T("\tA Bordo do avião: %s\n"), dados->passageiros[i].aviao->id_processo);
+		}
+
 	}
 	ReleaseMutex(dados->mutex_acede_aeroportos);
 	ReleaseMutex(dados->mutex_acede_avioes);
