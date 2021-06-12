@@ -39,6 +39,7 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
 void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int velocidade, int indiceAeroporto);
 void EliminaAviao(struct_dados* dados, int idProcesso);
+void EliminaPassageiro(struct_dados* dados, int idProcesso);
 void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera, int idProcesso);
 void PreencheResposta(struct_dados* dados,struct_msg_control_passageiro* msgControl, int tipoResposta, int idProcesso);
 BOOL VerificaPassageiroAceite(struct_dados* dados, struct_msg_passageiro_control* msg);
@@ -372,19 +373,30 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 			break;
 		}
 		_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
-		if (VerificaPassageiroAceite(dados, &mensagemLida)) {
-			_tprintf(_T("Foi Aceite!"));
-			InserePassageiro(dados, mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera, mensagemLida.id_processo);
-			EmbarcaPassageirosSePossivel(dados);
-			_tprintf(_T("Foi Inserido!"));
-			tipo_resposta = PASSAGEIRO_ACEITE;
+		switch(mensagemLida.tipo){
+			case NOVO_PASSAGEIRO:
+				if (VerificaPassageiroAceite(dados, &mensagemLida)) {
+					_tprintf(_T("Foi Aceite!"));
+					InserePassageiro(dados, mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera, mensagemLida.id_processo);
+					EmbarcaPassageirosSePossivel(dados);
+					_tprintf(_T("Foi Inserido!"));
+					tipo_resposta = PASSAGEIRO_ACEITE;
+					PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
+					_tprintf(_T("Foi Preenchida a resposta!"));
+					RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
+				}
+				else {
+					tipo_resposta = PASSAGEIRO_RECUSADO;
+					PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
+					_tprintf(_T("Foi Preenchida a resposta!"));
+					RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
+				}
+				break;
+			case ENCERRAR_PASSAGEIRO:
+				EliminaPassageiro(dados, mensagemLida.id_processo);
+				break;
 		}
-		else {
-			tipo_resposta = PASSAGEIRO_RECUSADO;
-		}
-		PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
-		_tprintf(_T("Foi Preenchida a resposta!"));
-		RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
+		
 		_tprintf(_T("Foi Respondido ao Passageiro!"));
 		_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
 		if (!DisconnectNamedPipe(dados->hMeuPipe)) {
@@ -644,6 +656,41 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 	dados->n_avioes_atuais = n_avioes;
 }
 
+void EliminaPassageiro(struct_dados* dados, int idProcesso) {
+	struct_aviao passageirosAux[MAX_PASSAGEIROS];
+	int indiceApagar=-1;
+	int n_passageiros = dados->n_passageiros_atuais;
+	for (int i = 0; i < n_passageiros; i++) {
+		if (dados->passageiros[i].id_processo == idProcesso) {
+			indiceApagar = i;
+			break;
+		}
+	}
+	int j = indiceApagar;
+	j++;
+	for (int i = indiceApagar; i < dados->n_passageiros_atuais; i++,j++)
+	{
+		if (j != (n_passageiros)) {
+			dados->passageiros[i].id_processo = dados->passageiros[j].id_processo;
+			_tcscpy_s(dados->passageiros[i].nome, _countof(dados->passageiros[i].nome), dados->passageiros[j].nome);
+			dados->passageiros[i].tempo_espera = dados->passageiros[j].tempo_espera;
+			dados->passageiros[i].origem = dados->passageiros[j].origem;
+			dados->passageiros[i].destino = dados->passageiros[j].destino;
+			dados->passageiros[i].aviao = dados->passageiros[j].aviao;
+		}
+		else {
+			dados->passageiros[i].id_processo = 0;
+			_tcscpy_s(dados->passageiros[i].nome, _countof(dados->passageiros[i].nome), "");
+			dados->passageiros[i].tempo_espera = 0;
+			dados->passageiros[i].origem = NULL;
+			dados->passageiros[i].destino = NULL;
+			dados->passageiros[i].aviao = NULL;
+		}
+	}
+	n_passageiros--;
+	dados->n_passageiros_atuais = n_passageiros;
+}
+
 //Funcoes dos Passageiros
 void InserePassageiro(struct_dados* dados, TCHAR origem[TAM], TCHAR destino[TAM], TCHAR nome[TAM], int tempoEspera, int idProcesso) {
 	WaitForSingleObject(dados->mutex_acede_passageiros, INFINITE);
@@ -829,7 +876,7 @@ void encerrar(struct_dados* dados) {
 	);
 	if (eventoEncerraControl == NULL) {
 		_tprintf(TEXT("Erro ao criar o evento de encerrar\n"));
-		return -1;
+		return;
 	}
 
 	SetEvent(eventoEncerraControl);

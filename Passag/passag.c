@@ -37,6 +37,7 @@ BOOL Registo(struct_dados* dados);
 void InicializaDados(struct_dados* dados, struct_aeroporto* origem, struct_aeroporto* destino, struct_aviao* aviao);
 BOOL VerificaChegadaDestino(struct_dados* dados);
 void FechaHandles(struct_dados* dados);
+void Encerrar(struct_dados* dados);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -90,6 +91,11 @@ int _tmain(int argc, TCHAR* argv[]) {
 	for (int i = 0; i < NTHREADSPRINCIPAIS; i++) {
 		CloseHandle(hthreadsPrincipais[i]);
 	}
+
+	Encerrar(&dados);
+	_tprintf(_T("To aqui\n"));
+	FechaHandles(&dados);
+	_tprintf(_T("To aqui\n"));
 	return 0;
 }
 
@@ -109,7 +115,9 @@ DWORD WINAPI Principal(LPVOID param) {
 	}
 
 	WaitForMultipleObjects(NTHREADSSECUNDARIAS,hThreadsSecundarias,FALSE,INFINITE);
-
+	for (int i = 0; i < NTHREADSSECUNDARIAS; i++) {
+		CloseHandle(hThreadsSecundarias[i]);
+	}
 	return 0;
 }
 
@@ -172,8 +180,8 @@ DWORD WINAPI LeInformacoesControl(LPVOID param) {
 			_tprintf(_T("Avançou para as coordenadas x: %d y: %d\n"), dados->eu.aviao->pos_x, dados->eu.aviao->pos_y);
 			break;
 		case AVIAO_DESPENHOU:
-				_tprintf(_T("Ups, o seu Avião despenhou-se!\n"));
-				return 0;
+			_tprintf(_T("Ups, o seu Avião despenhou-se!\n"));
+			return 0;
 			break;
 		}
 	} while (1);
@@ -321,6 +329,45 @@ BOOL VerificaChegadaDestino(struct_dados* dados) {
 
 //Funcao para fechar os handles
 void FechaHandles(struct_dados* dados) {
-	CloseHandle(dados->hMeuPipe);
+	//CloseHandle(dados->hMeuPipe);
+	_tprintf(_T("To aqui\n"));
 	CloseHandle(dados->mutex_pipe_control);
+	_tprintf(_T("To aqui\n"));
+}
+
+//Funcao para encerrar o Passageiro
+void Encerrar(struct_dados* dados) {
+	DWORD n;
+	struct_msg_passageiro_control mensagemEscrita;
+
+	//preenchimento mensagem escrita
+	mensagemEscrita.tipo = ENCERRAR_PASSAGEIRO;
+	mensagemEscrita.id_processo = dados->eu.id_processo;
+
+	WaitForSingleObject(dados->mutex_pipe_control, INFINITE);
+
+	//ligação named pipe control e escrita para o mesmo
+	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
+	if (!WaitNamedPipe(PIPE_CONTROL_GERAL, NMPWAIT_WAIT_FOREVER)) {
+		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
+		exit(-1);
+	}
+
+	_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
+	dados->hPipeControl = CreateFile(PIPE_CONTROL_GERAL, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, NULL);
+	if (dados->hPipeControl == NULL) {
+		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (CreateFile)\n"), PIPE_CONTROL_GERAL);
+		exit(-1);
+	}
+	_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
+
+	if (!WriteFile(dados->hPipeControl, &mensagemEscrita, sizeof(struct_msg_passageiro_control), &n, NULL)) {
+		_tprintf(TEXT("[ERRO] Escrever no pipe! (WriteFile)\n"));
+		exit(-1);
+	}
+	
+	CloseHandle(dados->hPipeControl);
+
+	ReleaseMutex(dados->mutex_pipe_control);
 }
