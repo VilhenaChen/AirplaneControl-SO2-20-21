@@ -92,7 +92,10 @@ int _tmain(int argc, TCHAR* argv[]) {
 		CloseHandle(hthreadsPrincipais[i]);
 	}
 
-	Encerrar(&dados);
+	if (indiceThread == 0) {
+		Encerrar(&dados);
+	}
+	
 	_tprintf(_T("To aqui\n"));
 	FechaHandles(&dados);
 	_tprintf(_T("To aqui\n"));
