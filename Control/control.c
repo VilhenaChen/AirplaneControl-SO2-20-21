@@ -393,6 +393,7 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 				}
 				break;
 			case ENCERRAR_PASSAGEIRO:
+				_tprintf(_T("O passageiro vai encerrar!"));
 				EliminaPassageiro(dados, mensagemLida.id_processo);
 				break;
 		}

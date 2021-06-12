@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include "../Control/estruturas.h"
-#define NTHREADSPRINCIPAIS 2
+#define NTHREADSPRINCIPAIS 3
 #define NTHREADSSECUNDARIAS 2
 #define MUTEX_INPUTS_PASSAG _T("Mutex dos Inputs")
 #define MUTEX_FLAG_SAIR_PASSAG _T("Mutex da flag de sair")
@@ -23,6 +23,7 @@ typedef struct {
 	HANDLE mutex_pipe_control;
 	HANDLE mutex_input;
 	HANDLE mutex_flag_sair;
+	HANDLE waitable_timer;
 	struct_input input;
 } struct_dados;
 
@@ -31,6 +32,7 @@ typedef struct {
 //Declaracao das funcoes e das threads
 DWORD WINAPI Principal(LPVOID param);
 DWORD WINAPI VerificaEncerramentoControl(LPVOID param);
+DWORD WINAPI VerificaTempoEspera(LPVOID param);
 DWORD WINAPI LeInformacoesControl(LPVOID param);
 DWORD WINAPI VerificaEncerramentoPassageiro(LPVOID param);
 BOOL Registo(struct_dados* dados);
@@ -83,6 +85,12 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Verificação do Encerramento do Control!\n"));
 		return -1;
 	}
+	hthreadsPrincipais[2] = CreateThread(NULL, 0, VerificaTempoEspera, &dados, 0, NULL);
+	if (hthreadsPrincipais[2] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread da Verificavao do Tempo de espera!\n"));
+		return -1;
+	}
+
 	indiceThread = WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
 
 
@@ -92,7 +100,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 		CloseHandle(hthreadsPrincipais[i]);
 	}
 
-	if (indiceThread == 0) {
+	if (indiceThread == 0 || indiceThread == 2) {
 		Encerrar(&dados);
 	}
 	
@@ -116,6 +124,7 @@ DWORD WINAPI Principal(LPVOID param) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread de verificar o encerramento do Passageiro!\n"));
 		return -1;
 	}
+
 
 	WaitForMultipleObjects(NTHREADSSECUNDARIAS,hThreadsSecundarias,FALSE,INFINITE);
 	for (int i = 0; i < NTHREADSSECUNDARIAS; i++) {
@@ -141,6 +150,26 @@ DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
 	return 0;
 }
 
+DWORD WINAPI VerificaTempoEspera(LPVOID param) {
+	struct_dados* dados = (struct_dados*)param;
+    LARGE_INTEGER tempo;
+    tempo.QuadPart = -((dados->eu.tempo_espera) * 10000000LL);
+
+    if (!SetWaitableTimer(dados->waitable_timer, &tempo, 0, NULL, NULL, 0))
+    {
+		_tprintf(_T("Erro ao iniciar o waitable timer!\n"));
+        return 0;
+    }
+
+    // Wait for the timer.
+
+	WaitForSingleObject(dados->waitable_timer, INFINITE);
+
+	_tprintf(_T("O seu tempo de espera terminou!\n"));
+
+    return 0;
+}
+	
 DWORD WINAPI LeInformacoesControl(LPVOID param) {
 	struct_dados* dados = (struct_dados*)param;
 	struct_msg_control_passageiro mensagemLida;
@@ -171,6 +200,7 @@ DWORD WINAPI LeInformacoesControl(LPVOID param) {
 		case AVIAO_ATRIBUIDO:
 			dados->eu.aviao->id_processo = mensagemLida.id_processo;
 			_tprintf(_T("Embarcou no avião %d\n"), dados->eu.aviao->id_processo);
+			CancelWaitableTimer(dados->waitable_timer);
 			break;
 		case NOVA_COORDENADA:
 			dados->eu.aviao->pos_x = mensagemLida.x_atual;
@@ -295,9 +325,9 @@ void InicializaDados(struct_dados* dados, struct_aeroporto* origem, struct_aerop
 	dados->eu.destino = destino;
 	dados->eu.aviao = aviao;
 	_stprintf_s(nomePipe, _countof(nomePipe), PIPE_PASSAG_PARTICULAR, dados->eu.id_processo);
-	dados->hMeuPipe = CreateNamedPipe(nomePipe, PIPE_ACCESS_INBOUND, PIPE_WAIT |PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1,
+	dados->hMeuPipe = CreateNamedPipe(nomePipe, PIPE_ACCESS_INBOUND, PIPE_WAIT | PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1,
 		sizeof(struct_msg_control_passageiro), sizeof(struct_msg_control_passageiro), 1000, NULL);
-	
+
 	if (dados->hMeuPipe == INVALID_HANDLE_VALUE) {
 		//_tprintf(TEXT("[ERRO] Criar Named Pipe! (CreateNamedPipe)"));
 		_tprintf(TEXT("CreateNamedPipe failed, GLE=%d.\n"), GetLastError());
@@ -320,6 +350,12 @@ void InicializaDados(struct_dados* dados, struct_aeroporto* origem, struct_aerop
 	if (dados->mutex_flag_sair == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da flag de sair!\n"));
 		return FALSE;
+	}
+
+	dados->waitable_timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	if (NULL == dados->waitable_timer){
+		_tprintf(_T("Erro ao criar o waitable timer!\n"));
+		return 1;
 	}
 }
 
