@@ -115,6 +115,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	//Preencher informações do eu com o que foi passado
 	util.eu.id_processo = GetCurrentProcessId();
 	util.eu.lotacao = _tstoi(argv[1]);
+	util.eu.nr_passageiros_atuais = 0;
 	util.eu.velocidade = _tstoi(argv[2]);
 	_tcscpy_s(util.eu.origem->nome,_countof(util.eu.origem->nome), argv[3]);
 

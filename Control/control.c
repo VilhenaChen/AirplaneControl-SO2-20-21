@@ -25,7 +25,7 @@ typedef struct {
 	HANDLE semafAvioesAtuais;
 	HANDLE mutex_acede_passageiros;
 	BOOL suspenso;
-	HANDLE mutex_meu_pipe;
+	HANDLE mutex_resposta_passageiro;
 	HANDLE hPipePassageiro;
 	HANDLE hMeuPipe;
 } struct_dados;
@@ -50,6 +50,11 @@ int getIndiceAeroporto(struct_dados* dados, TCHAR aeroporto[]);
 int getIndicePassageiro(struct_dados* dados, int idProcesso);
 void suspendeAvioes(struct_dados* dados);
 void retomaAvioes(struct_dados* dados);
+BOOL EmbarcaPassageirosSePossivel(struct_dados* dados);
+struct_aviao* getAviaoComOrigemDestino(struct_dados* dados, struct_aeroporto* origem, struct_aeroporto* destino);
+BOOL verificaAviaoEmVoo(struct_aviao* aviao);
+void InformaNovasCoordenadasPassageiro(struct_dados* dados, struct_aviao* aviao);
+void InformaAviaoDespenhado(struct_dados* dados, struct_aviao* aviao);
 void encerrar(struct_dados* dados);
 
 
@@ -265,14 +270,6 @@ DWORD WINAPI Menu(LPVOID param) {
 		}
 
 	} while (TRUE);
-		/*
-		* A interface deve permitir receber os seguintes comandos:
-			Encerrar todo o sistema (todas as aplicações são notificadas).
-				Criar novos aeroportos.
-				Suspender/ativar a aceitação de novos aviões por parte dos utilizadores.
-				Listar todos os aeroportos, aviões e passageiros
-		*/
-
 	return 0;
 }
 
@@ -284,7 +281,7 @@ DWORD WINAPI ComunicacaoAviao(LPVOID param) {
 	HANDLE objMapGeral;
 	struct_aviao_com comunicacaoGeral;
 	HANDLE semafEscritos, semafLidos;
-	//Lê da memoria partilhada geral
+
 	//Criacao dos semaforos
 	semafEscritos = CreateSemaphore(NULL, 0, MAX_AVIOES, SEMAFORO_AVIOES);
 	if (semafEscritos == NULL) {
@@ -298,7 +295,6 @@ DWORD WINAPI ComunicacaoAviao(LPVOID param) {
 	}
 	
 	objMapGeral = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_geral), MEMORIA_CONTROL);
-	//Verificar se nao e NULL
 	if (objMapGeral == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Geral!\n"));
 		return -1;
@@ -351,8 +347,8 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 	struct_msg_passageiro_control mensagemLida;
 	struct_msg_control_passageiro mensagemEscrita;
 	int tipo_resposta;
-	dados->mutex_meu_pipe = CreateMutex(NULL, FALSE, MUTEX_PIPE_CONTROL);
-	if (dados->mutex_meu_pipe == NULL) {
+	dados->mutex_resposta_passageiro = CreateMutex(NULL, FALSE, MUTEX_PIPE_CONTROL);
+	if (dados->mutex_resposta_passageiro == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do meu pipe!\n"));
 		return -1;
 	}
@@ -379,6 +375,7 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 		if (VerificaPassageiroAceite(dados, &mensagemLida)) {
 			_tprintf(_T("Foi Aceite!"));
 			InserePassageiro(dados, mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera, mensagemLida.id_processo);
+			EmbarcaPassageirosSePossivel(dados);
 			_tprintf(_T("Foi Inserido!"));
 			tipo_resposta = PASSAGEIRO_ACEITE;
 		}
@@ -412,7 +409,6 @@ BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { 
 	fflush(stdout);
 
 	objMapParticular = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(struct_memoria_particular), mem_aviao);
-	//Verificar se nao e NULL
 	fflush(stdout);
 	if (objMapParticular == NULL) {
 		_tprintf(_T("Erro ao criar o File Mapping Particular!\n"));
@@ -487,6 +483,7 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 
 			WaitForSingleObject(dados->mutex_acede_aeroportos, INFINITE);
 			dados->avioes[indiceAviao].destino = &dados->aeroportos[indiceAeroporto];
+			EmbarcaPassageirosSePossivel(dados);
 			ReleaseMutex(dados->mutex_acede_aeroportos);
 
 			ReleaseMutex(dados->mutex_acede_avioes);
@@ -498,6 +495,7 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 
 void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comunicacaoGeral) {
 	int indiceAviao = -1;
+	struct_msg_control_passageiro msg;
 	switch (comunicacaoGeral->tipomsg)
 	{
 	case NOVAS_COORDENADAS:
@@ -505,6 +503,7 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
 		dados->avioes[indiceAviao].pos_x = comunicacaoGeral->pos_x;
 		dados->avioes[indiceAviao].pos_y = comunicacaoGeral->pos_y;
+		InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
 		_tprintf(_T("Avião: %d - %d --- Posição: %d, %d\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].pos_x, dados->avioes[indiceAviao].pos_y);
 		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
@@ -515,11 +514,16 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 		dados->avioes[indiceAviao].pos_y = dados->avioes[indiceAviao].destino->pos_y;
 		dados->avioes[indiceAviao].origem = dados->avioes[indiceAviao].destino;
 		dados->avioes[indiceAviao].destino = NULL;
+		InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
 		_tprintf(_T("Avião: %d - %d --- Aterrou no Aeroporto de %s\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].origem->nome);
 		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
 	case ENCERRAR_AVIAO:
+		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+		InformaAviaoDespenhado(dados, &dados->avioes[indiceAviao]);
 		EliminaAviao(dados, comunicacaoGeral->id_processo);
+		ReleaseMutex(dados->mutex_acede_avioes);
 		break;
 	}
 }
@@ -588,6 +592,7 @@ void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int veloci
 	dados->avioes[dados->n_avioes_atuais].id_processo = idProcesso;
 	dados->avioes[dados->n_avioes_atuais].lotacao = capacidade;
 	dados->avioes[dados->n_avioes_atuais].velocidade = velocidade;
+	dados->avioes[dados->n_avioes_atuais].nr_passageiros_atuais = 0;
 
 	WaitForSingleObject(dados->mutex_acede_aeroportos, INFINITE);
 	dados->avioes[dados->n_avioes_atuais].pos_x = dados->aeroportos[indiceAeroporto].pos_x;
@@ -622,6 +627,7 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 			dados->avioes[i].pos_y = dados->avioes[j].pos_y;
 			dados->avioes[i].velocidade = dados->avioes[j].velocidade;
 			dados->avioes[i].destino = dados->avioes[j].destino;
+			dados->avioes[i].nr_passageiros_atuais = dados->avioes[j].nr_passageiros_atuais;
 		}
 		else {
 			dados->avioes[i].id_processo = 0;
@@ -631,6 +637,7 @@ void EliminaAviao(struct_dados* dados, int idProcesso) {
 			dados->avioes[i].pos_y = 0;
 			dados->avioes[i].velocidade = 0;
 			dados->avioes[i].destino = NULL;
+			dados->avioes[i].nr_passageiros_atuais = 0;
 		}
 	}
 	n_avioes--;
@@ -655,7 +662,6 @@ void PreencheResposta(struct_dados* dados, struct_msg_control_passageiro* msgCon
 		case PASSAGEIRO_RECUSADO:
 			break;
 		case PASSAGEIRO_ACEITE:
-			_tprintf(_T("aquiiiiii\n"));
 			msgControl->x_origem=dados->passageiros[getIndicePassageiro(dados,idProcesso)].origem->pos_x;
 			msgControl->y_origem=dados->passageiros[getIndicePassageiro(dados,idProcesso)].origem->pos_y;
 			msgControl->x_destino=dados->passageiros[getIndicePassageiro(dados,idProcesso)].destino->pos_x;
@@ -666,6 +672,9 @@ void PreencheResposta(struct_dados* dados, struct_msg_control_passageiro* msgCon
 			msgControl->y_atual = dados->passageiros[getIndicePassageiro(dados, idProcesso)].aviao->pos_y;
 			break;
 		case AVIAO_DESPENHOU:
+			break;
+		case AVIAO_ATRIBUIDO:
+			msgControl->id_processo = dados->passageiros[getIndicePassageiro(dados, idProcesso)].aviao->id_processo;
 			break;
 	}
 }
@@ -759,6 +768,57 @@ void retomaAvioes(struct_dados* dados) {
 	ReleaseSemaphore(dados->semafAvioesAtuais, cont, NULL);
 }
 
+BOOL EmbarcaPassageirosSePossivel(struct_dados* dados) {
+	struct_msg_control_passageiro msg;
+	for (int i = 0; i < dados->n_passageiros_atuais; i++) {
+		if (dados->passageiros[i].aviao == NULL) {
+			dados->passageiros[i].aviao=getAviaoComOrigemDestino(dados, dados->passageiros[i].origem, dados->passageiros[i].destino);
+			if (dados->passageiros[i].aviao != NULL) {
+				PreencheResposta(dados, &msg, AVIAO_ATRIBUIDO, dados->passageiros[i].id_processo);
+				RespondeAoPassageiro(dados, &msg, dados->passageiros[i].id_processo);
+			}
+		}
+	}
+}
+
+struct_aviao* getAviaoComOrigemDestino(struct_dados* dados, struct_aeroporto* origem, struct_aeroporto* destino) {
+	for (int i = 0; i < dados->n_avioes_atuais; i++) {
+		if (verificaAviaoEmVoo(&dados->avioes[i]) == FALSE && dados->avioes[i].lotacao > dados->avioes[i].nr_passageiros_atuais) {
+			if (dados->avioes[i].origem == origem && dados->avioes[i].destino == destino) {
+				return &dados->avioes[i];
+			}
+		}
+	}
+	return NULL;
+}
+
+BOOL verificaAviaoEmVoo(struct_aviao* aviao) {
+	if (aviao->pos_x == aviao->origem->pos_x && aviao->pos_y == aviao->origem->pos_y) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
+void InformaNovasCoordenadasPassageiro(struct_dados* dados, struct_aviao* aviao) {
+	struct_msg_control_passageiro msg;
+	for (int i = 0; i < dados->n_passageiros_atuais; i++) {
+		if (dados->passageiros[i].aviao == aviao) {
+			PreencheResposta(dados, &msg, NOVA_COORDENADA, dados->passageiros[i].id_processo);
+			RespondeAoPassageiro(dados, &msg, dados->passageiros[i].id_processo);
+		}
+	}
+}
+
+void InformaAviaoDespenhado(struct_dados* dados, struct_aviao* aviao) {
+	struct_msg_control_passageiro msg;
+	for (int i = 0; i < dados->n_passageiros_atuais; i++) {
+		if (dados->passageiros[i].aviao == aviao) {
+			PreencheResposta(dados, &msg, AVIAO_DESPENHOU, dados->passageiros[i].id_processo);
+			RespondeAoPassageiro(dados, &msg, dados->passageiros[i].id_processo);
+		}
+	}
+}
+
 //Funcao de encerrar o control
 void encerrar(struct_dados* dados) {
 	HANDLE eventoEncerraControl = CreateEvent(
@@ -775,8 +835,6 @@ void encerrar(struct_dados* dados) {
 	SetEvent(eventoEncerraControl);
 	CloseHandle(eventoEncerraControl);
 }
-
-
 
 
 

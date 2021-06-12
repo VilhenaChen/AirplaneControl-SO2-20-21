@@ -25,7 +25,7 @@
 #define EVENTO_ENCERRA_CONTROL _T("Evento encerra Control")
 #define MUTEX_PASSAGEIROS _T("Mutex dos Passageiros")
 #define MUTEX_PIPE_CONTROL _T("Mutex Pipe Control")
-#define MUTEX_PIPE_PASSAGEIRO _T("Mutex Pipe Passageiro")
+#define MUTEX_RESPOSTA_PASSAGEIRO _T("Mutex Resposta Passageiro")
 
 //DEFINES PARA TIPOS DE MENSAGENS AVIAO-CONTROLADOR
 #define NOVO_AVIAO 1
@@ -52,8 +52,9 @@
 //DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-PASSAGEIRO
 #define PASSAGEIRO_ACEITE 1
 #define PASSAGEIRO_RECUSADO 2
-#define NOVA_COORDENADA 3
-#define AVIAO_DESPENHOU 4
+#define AVIAO_ATRIBUIDO 3
+#define NOVA_COORDENADA 4
+#define AVIAO_DESPENHOU 5
 
 
 typedef struct {
@@ -66,6 +67,7 @@ typedef struct {
 typedef struct {
 	int id_processo;
 	int lotacao;
+	int nr_passageiros_atuais;
 	int velocidade;
 	int pos_x;
 	int pos_y;
@@ -90,6 +92,7 @@ typedef struct {
 	int y_destino;
 	int x_atual;
 	int y_atual;
+	int id_processo;
 } struct_msg_control_passageiro;
 
 typedef struct {
