@@ -283,28 +283,28 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 	}
 
 	while (1) {
-		_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
+		//_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
 		if (!ConnectNamedPipe(dados->hMeuPipe, NULL)) {
 			_tprintf(TEXT("[ERRO] Ligação ao leitor! (ConnectNamedPipe\n"));
 			exit(-1);
 		}
 		retorno = ReadFile(dados->hMeuPipe, &mensagemLida, sizeof(struct_msg_passageiro_control), &n, NULL);
 		if (!retorno || !n) {
-			_tprintf(TEXT("[Control] %d %d... (ReadFile)\n"), retorno, n);
+			//_tprintf(TEXT("[Control] %d %d... (ReadFile)\n"), retorno, n);
 			break;
 		}
-		_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
+		//_tprintf(TEXT("[Control] Recebi %d bytes: '%d %s %s %s %d'... (ReadFile)\n"), n, mensagemLida.id_processo, mensagemLida.nome, mensagemLida.origem, mensagemLida.destino, mensagemLida.tempo_espera);
 		switch(mensagemLida.tipo){
 			case NOVO_PASSAGEIRO:
 				if (VerificaPassageiroAceite(dados, &mensagemLida)) {
-					_tprintf(_T("Foi Aceite!"));
+					//_tprintf(_T("Foi Aceite!"));
 					InserePassageiro(dados, mensagemLida.origem, mensagemLida.destino, mensagemLida.nome, mensagemLida.tempo_espera, mensagemLida.id_processo);
 					EmbarcaPassageirosSePossivel(dados);
-					_tprintf(_T("Foi Inserido!"));
+					//_tprintf(_T("Foi Inserido!"));
 					tipo_resposta = PASSAGEIRO_ACEITE;
 					WaitForSingleObject(dados->mutex_resposta_passageiro,INFINITE);
 					PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
-					_tprintf(_T("Foi Preenchida a resposta!"));
+					//_tprintf(_T("Foi Preenchida a resposta!"));
 					RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);
 					ReleaseMutex(dados->mutex_resposta_passageiro);
 				}
@@ -312,20 +312,20 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 					tipo_resposta = PASSAGEIRO_RECUSADO;
 					WaitForSingleObject(dados->mutex_resposta_passageiro, INFINITE);
 					PreencheResposta(dados, &mensagemEscrita, tipo_resposta, mensagemLida.id_processo);
-					_tprintf(_T("Foi Preenchida a resposta!"));
+					//_tprintf(_T("Foi Preenchida a resposta!"));
 					RespondeAoPassageiro(dados, &mensagemEscrita, mensagemLida.id_processo);					
 					ReleaseMutex(dados->mutex_resposta_passageiro);
 				}
 				break;
 			case ENCERRAR_PASSAGEIRO:
-				_tprintf(_T("O passageiro vai encerrar!"));
+				//_tprintf(_T("O passageiro vai encerrar!"));
 				EliminaPassageiro(dados, mensagemLida.id_processo);
-				_tprintf(_T("Eliminei o Passageiro!"));
+				//_tprintf(_T("Eliminei o Passageiro!"));
 				break;
 		}
 		
-		_tprintf(_T("Foi Respondido ao Passageiro!"));
-		_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
+		//_tprintf(_T("Foi Respondido ao Passageiro!"));
+		//_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
 		if (!DisconnectNamedPipe(dados->hMeuPipe)) {
 			_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
 			exit(-1);
@@ -838,20 +838,20 @@ BOOL RespondeAoPassageiro(struct_dados* dados, struct_msg_control_passageiro* ms
 	_stprintf_s(nomePipe, _countof(nomePipe), PIPE_PASSAG_PARTICULAR, idProcesso);
 
 	//ligação named pipe control e escrita para o mesmo
-	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_PASSAG_PARTICULAR);
+	//_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_PASSAG_PARTICULAR);
 	if (!WaitNamedPipe(nomePipe, NMPWAIT_WAIT_FOREVER)) {
 		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (WaitNamedPipe)\n"), PIPE_PASSAG_PARTICULAR);
 		exit(-1);
 	}
 
-	_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
+	//_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
 	pipePassag = CreateFile(nomePipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
 		FILE_ATTRIBUTE_NORMAL, NULL);
 	if (pipePassag == NULL) {
 		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (CreateFile)\n"), PIPE_PASSAG_PARTICULAR);
 		exit(-1);
 	}
-	_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
+	//_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
 
 	if (!WriteFile(pipePassag, msg, sizeof(struct_msg_control_passageiro), &n, NULL)) {
 		_tprintf(TEXT("[ERRO] Escrever no pipe! (WriteFile)\n"));

@@ -80,8 +80,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 		dados.eu.tempo_espera = _tstoi(argv[4]);
 	}
 
-	_tprintf(_T("Heloo: %d"), dados.eu.tempo_espera);
-
 	Registo(&dados);
 
 	//Criacao das Threads
@@ -279,20 +277,20 @@ BOOL Registo(struct_dados* dados) {
 	WaitForSingleObject(dados->mutex_pipe_control, INFINITE);
 
 	//ligação named pipe control e escrita para o mesmo
-	_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
+	//_tprintf(TEXT("[LEITOR] Esperar pelo pipe '%s' (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
 	if (!WaitNamedPipe(PIPE_CONTROL_GERAL, NMPWAIT_WAIT_FOREVER)) {
 		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (WaitNamedPipe)\n"), PIPE_CONTROL_GERAL);
 		exit(-1);
 	}
 
-	_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
+	//_tprintf(TEXT("[LEITOR] Ligação ao pipe do control... (CreateFile)\n"));
 	dados->hPipeControl = CreateFile(PIPE_CONTROL_GERAL, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
 		FILE_ATTRIBUTE_NORMAL, NULL);
 	if (dados->hPipeControl == NULL) {
 		_tprintf(TEXT("[ERRO] Ligar ao pipe '%s'! (CreateFile)\n"), PIPE_CONTROL_GERAL);
 		exit(-1);
 	}
-	_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
+	//_tprintf(TEXT("[LEITOR] Liguei-me...\n"));
 
 	if (!WriteFile(dados->hPipeControl, &mensagemEscrita, sizeof(struct_msg_passageiro_control), &n, NULL)) {
 		_tprintf(TEXT("[ERRO] Escrever no pipe! (WriteFile)\n"));
@@ -300,20 +298,20 @@ BOOL Registo(struct_dados* dados) {
 	}
 	
 	//criação e leitura do pipe do passageiro
-	_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
+	//_tprintf(TEXT(" Esperar ligação de um passageiro... (ConnectNamedPipe)\n"));
 	if (!ConnectNamedPipe(dados->hMeuPipe, NULL)) {
-		_tprintf(TEXT("[ERRO] Ligação ao leitor! (ConnectNamedPipe\n"));
+		_tprintf(TEXT("[ERRO] Ligação ao leitor! GLE =  %d (ConnectNamedPipe\n"),GetLastError());
 		exit(-1);
 	}
 	retorno = ReadFile(dados->hMeuPipe, &mensagemLida, sizeof(struct_msg_control_passageiro), &n, NULL);
 	if (!retorno || !n) {
-		_tprintf(TEXT("[Passageiro] %d %d... (ReadFile)\n"), retorno, n);
+		//_tprintf(TEXT("[Passageiro] %d %d... (ReadFile)\n"), retorno, n);
 		return FALSE;
 	}
-	_tprintf(TEXT("[Passageiro] Recebi %d bytes: '%d'... (ReadFile)\n"), n, mensagemLida.tipo);
+	//_tprintf(TEXT("[Passageiro] Recebi %d bytes: '%d'... (ReadFile)\n"), n, mensagemLida.tipo);
 
 
-	_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
+	//_tprintf(TEXT("[ESCRITOR] Desligar o pipe (DisconnectNamedPipe)\n"));
 	if (!DisconnectNamedPipe(dados->hMeuPipe)) {
 		_tprintf(TEXT("[ERRO] Desligar o pipe! (DisconnectNamedPipe)"));
 		exit(-1);
