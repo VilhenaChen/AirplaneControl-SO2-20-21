@@ -365,25 +365,25 @@ void InicializaDados(struct_dados* dados, struct_aeroporto* origem, struct_aerop
 	dados->mutex_pipe_control = CreateMutex(NULL, FALSE, MUTEX_PIPE_CONTROL);
 	if (dados->mutex_pipe_control == NULL) {
 		_tprintf(_T("Erro ao criar o mutex do pipe do control!\n"));
-		return FALSE;
+		return;
 	}
 
 	dados->mutex_input = CreateMutex(NULL, FALSE, MUTEX_INPUTS_PASSAG);
 	if (dados->mutex_input == NULL) {
 		_tprintf(_T("Erro ao criar o mutex de input!\n"));
-		return FALSE;
+		return;
 	}
 
 	dados->mutex_flag_sair = CreateMutex(NULL, FALSE, MUTEX_FLAG_SAIR_PASSAG);
 	if (dados->mutex_flag_sair == NULL) {
 		_tprintf(_T("Erro ao criar o mutex da flag de sair!\n"));
-		return FALSE;
+		return;
 	}
 
 	dados->waitable_timer = CreateWaitableTimer(NULL, TRUE, NULL);
 	if (NULL == dados->waitable_timer){
 		_tprintf(_T("Erro ao criar o waitable timer!\n"));
-		return 1;
+		return;
 	}
 }
 
