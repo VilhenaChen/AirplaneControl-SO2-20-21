@@ -5,17 +5,16 @@
 #include <fcntl.h>
 #include <io.h>
 #include "estruturas.h"
-#define NTHREADS 3
+#define NTHREADS 4
 #define MUTEX_ACEDER_AVIOES _T("Mutex para aceder a estrutura dos avioes")
 #define MUTEX_ACEDER_AEROPORTOS _T("Mutex para aceder a estrutura dos aeroportos")
+
 
 //Estrutura onde sao guardados os dados do control
 typedef struct {
 	struct_aeroporto aeroportos[MAX_AEROPORTOS];
 	struct_aviao avioes[MAX_AVIOES];
 	struct_passageiro passageiros[MAX_PASSAGEIROS];
-	//struct_memoria_geral* ptrMemoriaGeral;
-	//HANDLE objMapGeral;
 	int n_aeroportos_atuais;
 	int n_avioes_atuais;
 	int n_passageiros_atuais;
@@ -34,6 +33,9 @@ typedef struct {
 DWORD WINAPI Menu(LPVOID param);
 DWORD WINAPI ComunicacaoAviao(LPVOID param);
 DWORD WINAPI ComunicacaoPassageiro(LPVOID param);
+DWORD WINAPI HeartbeatAvioes(LPVOID param);
+void InicializaDados(struct_dados* dados);
+void CriaLeChave(struct_dados* dados);
 BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comunicacaoGeral);
 BOOL CriaAeroporto(TCHAR nome[TAM], int x, int y, struct_dados* dados);
@@ -69,104 +71,15 @@ int _tmain(int argc, TCHAR* argv[]) {
 	
 	HANDLE hthreads[NTHREADS];
 	struct_dados dados;
-	HKEY chave; //Handle para a chave depois de criada/aberta
-	DWORD resultado_chave; //inteiro long, indica o que aconteceu à chave, se foi criada ou aberta ou não
-	TCHAR nome_chave[TAM] = _T("SOFTWARE\\TEMP\\TP_SO2"), nome_par_avioes[TAM] = _T("maxAvioes"),nome_par_aeroportos[TAM] = _T("maxAeroportos");
-	DWORD par_valor_avioes = 10, par_valor_aeroportos = 10;
-
-
 	
-	dados.n_aeroportos_atuais = 0;
-	dados.n_avioes_atuais = 0;
-	dados.n_passageiros_atuais = 0;
-	dados.suspenso = FALSE;
-	
-	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // try to create a named mutex
-	if (GetLastError() == ERROR_ALREADY_EXISTS) // did the mutex already exist?
+	CreateMutex(0, FALSE, _T("Local\\$controlador$")); // Tenta criar um named Mutex
+	if (GetLastError() == ERROR_ALREADY_EXISTS) // O Mutex ja existe?
 	{
 		_tprintf(_T("ERRO! Já existe uma instância deste programa a correr!\n"));
-		return -1; // quit; mutex is released automatically
+		return -1; // Caso ja exista o programa termina garantindo que apenas existe uma instancia do mesmo
 	}
-
-	dados.mutex_comunicacao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
-	if (dados.mutex_comunicacao == NULL) {
-		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
-		return -1;
-	}
-
-	dados.mutex_acede_avioes = CreateMutex(NULL, FALSE, MUTEX_ACEDER_AVIOES);
-	if (dados.mutex_acede_avioes == NULL) {
-		_tprintf(_T("Erro ao criar o mutex de aceder aos avioes!\n"));
-		return -1;
-	}
-
-	dados.mutex_acede_aeroportos = CreateMutex(NULL, FALSE, MUTEX_ACEDER_AEROPORTOS);
-	if (dados.mutex_acede_aeroportos == NULL) {
-		_tprintf(_T("Erro ao criar o mutex de aceder aos aeroportos!\n"));
-		return -1;
-	}
-
-	dados.semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
-	if (dados.semafAvioesAtuais == NULL) {
-		_tprintf(_T("Erro ao criar o semáforo dos avioes atuais!\n"));
-		return -1;
-	}
-
-	dados.mutex_acede_passageiros = CreateMutex(NULL, FALSE, MUTEX_PASSAGEIROS);
-	if(dados.mutex_acede_passageiros == NULL) {
-		_tprintf(_T("Erro ao criar o mutex de aceder aos passageiros!\n"));
-		return -1;
-	}
-
-	//Criacao da Key onde serao guardados o max de avioes e Aeroportos
-	if (RegCreateKeyEx(HKEY_CURRENT_USER,
-		nome_chave /*caminho*/,
-		0,
-		NULL,
-		REG_OPTION_NON_VOLATILE /*opção default, funcionaria igual com 0*/,
-		KEY_ALL_ACCESS /*acesso total a todas as funcionalidades da chave*/,
-		NULL /*quem pode ter acesso, neste caso apenas o proprio*/,
-		&chave,
-		&resultado_chave)
-		!= ERROR_SUCCESS) /*diferente de sucesso*/
-	{
-		_tprintf(TEXT("ERRO! A chave não foi criada nem aberta!\n"));
-		return -1;
-	}
-	if (resultado_chave == REG_CREATED_NEW_KEY) {
-		_tprintf(TEXT("A chave %s foi criada!\n"), nome_chave);
-	}
-	else {
-		if (resultado_chave == REG_OPENED_EXISTING_KEY) {
-			_tprintf(TEXT("A chave %s foi aberta!\n"), nome_chave);
-		}
-	}
-
-	if (RegSetValueEx(
-		chave,		/*handle chave aberta*/
-		nome_par_avioes	/*nome parametro*/,
-		0,
-		REG_DWORD, 
-		&par_valor_avioes, // para não dar warning
-		sizeof(par_valor_avioes)  //tamanho do que está escrito na string incluindo o /0
-	)!=ERROR_SUCCESS)
-	{
-		_tprintf(TEXT("ERRO ao aceder ao atributo %s !\n"),nome_par_avioes);
-		return -1;
-	}
-
-	if (RegSetValueEx(
-		chave,		/*handle chave aberta*/
-		nome_par_aeroportos	/*nome parametro*/,
-		0,
-		REG_DWORD,
-		&par_valor_aeroportos, // para não dar warning
-		sizeof(par_valor_aeroportos)  //tamanho do que está escrito na string incluindo o /0
-	)!=ERROR_SUCCESS)
-	{
-		_tprintf(TEXT("ERRO ao aceder ao atributo %s !\n"),nome_par_aeroportos);
-		return -1;
-	}
+	InicializaDados(&dados);
+	CriaLeChave(&dados);
 
 	//Criacao das Threads
 	hthreads[0] = CreateThread(NULL, 0, Menu, &dados, 0, NULL);
@@ -184,14 +97,17 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação do Passageiro!\n"));
 		return -1;
 	}
-
+	hthreads[3] = CreateThread(NULL, 0, HeartbeatAvioes, &dados, 0, NULL);
+	if (hthreads[3] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread do HeartBeat dos avioes!\n"));
+		return -1;
+	}
 	WaitForMultipleObjects(NTHREADS, hthreads, FALSE, INFINITE);
 
 	for (int i = 0; i < NTHREADS; i++) {
 		CloseHandle(hthreads[i]);
 	}
 
-	RegCloseKey(chave);
 	CloseHandle(dados.mutex_comunicacao);
 	CloseHandle(dados.mutex_acede_aeroportos);
 	CloseHandle(dados.mutex_acede_avioes);
@@ -409,7 +325,141 @@ DWORD WINAPI ComunicacaoPassageiro(LPVOID param) {
 	return 0;
 }
 
+DWORD WINAPI HeartbeatAvioes(LPVOID param) {
+	struct_dados* dados = (struct_dados*)param;	
+	LARGE_INTEGER tempo;
+	HANDLE waitable_timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	if (NULL == waitable_timer) {
+		_tprintf(_T("Erro ao criar o waitable timer!\n"));
+		return 1;
+	}
+
+	do {
+		tempo.QuadPart = -(10000000LL);
+
+		if (!SetWaitableTimer(waitable_timer, &tempo, 0, NULL, NULL, 0))
+		{
+			_tprintf(_T("Erro ao iniciar o waitable timer!\n"));
+			return 0;
+		}
+		WaitForSingleObject(waitable_timer, INFINITE);
+
+		for (int i = 0; i < dados->n_avioes_atuais; i++) {
+			dados->avioes[i].tempo_inatividade++;
+			if (dados->avioes[i].tempo_inatividade == 3) {
+				_tprintf(_T("O avião %d (PID: %d) ficou inativo!\n"), i, dados->avioes[i].id_processo);
+				EliminaAviao(dados, dados->avioes[i].id_processo);
+				InformaAviaoDespenhado(dados, &dados->avioes[i]);
+			}
+		}
+
+	} while (1);
+	return 0;
+}
+
 //Codigo de Funcoes
+
+//Inicializa Dados
+void InicializaDados(struct_dados* dados) {
+
+	dados->n_aeroportos_atuais = 0;
+	dados->n_avioes_atuais = 0;
+	dados->n_passageiros_atuais = 0;
+	dados->suspenso = FALSE;
+
+	dados->mutex_comunicacao = CreateMutex(NULL, FALSE, MUTEX_COMUNICACAO_CONTROL);
+	if (dados->mutex_comunicacao == NULL) {
+		_tprintf(_T("Erro ao criar o mutex da primeira comunicacao!\n"));
+		return -1;
+	}
+
+	dados->mutex_acede_avioes = CreateMutex(NULL, FALSE, MUTEX_ACEDER_AVIOES);
+	if (dados->mutex_acede_avioes == NULL) {
+		_tprintf(_T("Erro ao criar o mutex de aceder aos avioes!\n"));
+		return -1;
+	}
+
+	dados->mutex_acede_aeroportos = CreateMutex(NULL, FALSE, MUTEX_ACEDER_AEROPORTOS);
+	if (dados->mutex_acede_aeroportos == NULL) {
+		_tprintf(_T("Erro ao criar o mutex de aceder aos aeroportos!\n"));
+		return -1;
+	}
+
+	dados->semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
+	if (dados->semafAvioesAtuais == NULL) {
+		_tprintf(_T("Erro ao criar o semáforo dos avioes atuais!\n"));
+		return -1;
+	}
+
+	dados->mutex_acede_passageiros = CreateMutex(NULL, FALSE, MUTEX_PASSAGEIROS);
+	if (dados->mutex_acede_passageiros == NULL) {
+		_tprintf(_T("Erro ao criar o mutex de aceder aos passageiros!\n"));
+		return -1;
+	}
+}
+
+//Funcao de criar ou ler a chave com os numeros maximos de Aeroportos e Avioes
+void CriaLeChave(struct_dados* dados) {
+	HKEY chave; //Handle para a chave depois de criada/aberta
+	DWORD resultado_chave; //inteiro long, indica o que aconteceu à chave, se foi criada ou aberta ou não
+	TCHAR nome_chave[TAM] = _T("SOFTWARE\\TEMP\\TP_SO2"), nome_par_avioes[TAM] = _T("maxAvioes"),nome_par_aeroportos[TAM] = _T("maxAeroportos");
+	DWORD par_valor_avioes = MAX_AVIOES, par_valor_aeroportos = MAX_AEROPORTOS;
+
+	//Tentativa de leitura da chave
+
+
+	//Criacao da Key onde serao guardados o max de avioes e Aeroportos
+	if (RegCreateKeyEx(HKEY_CURRENT_USER,
+		nome_chave /*caminho*/,
+		0,
+		NULL,
+		REG_OPTION_NON_VOLATILE /*opção default, funcionaria igual com 0*/,
+		KEY_ALL_ACCESS /*acesso total a todas as funcionalidades da chave*/,
+		NULL /*quem pode ter acesso, neste caso apenas o proprio*/,
+		&chave,
+		&resultado_chave)
+		!= ERROR_SUCCESS) /*diferente de sucesso*/
+	{
+		_tprintf(TEXT("ERRO! A chave não foi criada nem aberta!\n"));
+		return -1;
+	}
+	if (resultado_chave == REG_CREATED_NEW_KEY) {
+		_tprintf(TEXT("A chave %s foi criada!\n"), nome_chave);
+	}
+	else {
+		if (resultado_chave == REG_OPENED_EXISTING_KEY) {
+			_tprintf(TEXT("A chave %s foi aberta!\n"), nome_chave);
+		}
+	}
+
+	if (RegSetValueEx(
+		chave,		/*handle chave aberta*/
+		nome_par_avioes	/*nome parametro*/,
+		0,
+		REG_DWORD, 
+		&par_valor_avioes, // para não dar warning
+		sizeof(par_valor_avioes)  //tamanho do que está escrito na string incluindo o /0
+	)!=ERROR_SUCCESS)
+	{
+		_tprintf(TEXT("ERRO ao aceder ao atributo %s !\n"),nome_par_avioes);
+		return -1;
+	}
+
+	if (RegSetValueEx(
+		chave,		/*handle chave aberta*/
+		nome_par_aeroportos	/*nome parametro*/,
+		0,
+		REG_DWORD,
+		&par_valor_aeroportos, // para não dar warning
+		sizeof(par_valor_aeroportos)  //tamanho do que está escrito na string incluindo o /0
+	)!=ERROR_SUCCESS)
+	{
+		_tprintf(TEXT("ERRO ao aceder ao atributo %s !\n"),nome_par_aeroportos);
+		return -1;
+	}
+	RegCloseKey(chave);
+}
+
 
 //Funções de Comunicação
 BOOL RespondeAoAviao(struct_dados* dados, struct_aviao_com* comunicacaoGeral) { //Responde a cada aviao atraves da memoria partilhada particular
@@ -509,36 +559,43 @@ void preencheComunicacaoParticularEAtualizaInformacoes(struct_dados* dados, stru
 void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comunicacaoGeral) {
 	int indiceAviao = -1;
 	struct_msg_control_passageiro msg;
+	if (comunicacaoGeral->tipomsg != ENCERRAR_AVIAO) {
+		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+		dados->avioes[indiceAviao].tempo_inatividade = 0;
+		ReleaseMutex(dados->mutex_acede_avioes);
+	}
+
 	switch (comunicacaoGeral->tipomsg)
 	{
-	case NOVAS_COORDENADAS:
-		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
-		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
-		dados->avioes[indiceAviao].pos_x = comunicacaoGeral->pos_x;
-		dados->avioes[indiceAviao].pos_y = comunicacaoGeral->pos_y;
-		InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
-		_tprintf(_T("Avião: %d - %d --- Posição: %d, %d\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].pos_x, dados->avioes[indiceAviao].pos_y);
-		ReleaseMutex(dados->mutex_acede_avioes);
-		break;
-	case CHEGADA_AO_DESTINO:
-		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
-		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
-		dados->avioes[indiceAviao].pos_x = dados->avioes[indiceAviao].destino->pos_x;
-		dados->avioes[indiceAviao].pos_y = dados->avioes[indiceAviao].destino->pos_y;
-		dados->avioes[indiceAviao].origem = dados->avioes[indiceAviao].destino;
-		dados->avioes[indiceAviao].destino = NULL;
-		InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
-		_tprintf(_T("Avião: %d - %d --- Aterrou no Aeroporto de %s\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].origem->nome);
-		ReleaseMutex(dados->mutex_acede_avioes);
-		break;
-	case ENCERRAR_AVIAO:
-		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
-		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
-		_tprintf(_T("O Aviao %d (PID: %d) encerrou!"), indiceAviao, dados->avioes[indiceAviao].id_processo);
-		InformaAviaoDespenhado(dados, &dados->avioes[indiceAviao]);
-		EliminaAviao(dados, comunicacaoGeral->id_processo);
-		ReleaseMutex(dados->mutex_acede_avioes);
-		break;
+		case NOVAS_COORDENADAS:
+			WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+			indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+			dados->avioes[indiceAviao].pos_x = comunicacaoGeral->pos_x;
+			dados->avioes[indiceAviao].pos_y = comunicacaoGeral->pos_y;
+			InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
+			_tprintf(_T("Avião: %d - %d --- Posição: %d, %d\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].pos_x, dados->avioes[indiceAviao].pos_y);
+			ReleaseMutex(dados->mutex_acede_avioes);
+			break;
+		case CHEGADA_AO_DESTINO:
+			WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+			indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+			dados->avioes[indiceAviao].pos_x = dados->avioes[indiceAviao].destino->pos_x;
+			dados->avioes[indiceAviao].pos_y = dados->avioes[indiceAviao].destino->pos_y;
+			dados->avioes[indiceAviao].origem = dados->avioes[indiceAviao].destino;
+			dados->avioes[indiceAviao].destino = NULL;
+			InformaNovasCoordenadasPassageiro(dados, &dados->avioes[indiceAviao]);
+			_tprintf(_T("Avião: %d - %d --- Aterrou no Aeroporto de %s\n"), indiceAviao, dados->avioes[indiceAviao].id_processo, dados->avioes[indiceAviao].origem->nome);
+			ReleaseMutex(dados->mutex_acede_avioes);
+			break;
+		case ENCERRAR_AVIAO:
+			WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
+			indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+			_tprintf(_T("O Aviao %d (PID: %d) encerrou!"), indiceAviao, dados->avioes[indiceAviao].id_processo);
+			InformaAviaoDespenhado(dados, &dados->avioes[indiceAviao]);
+			EliminaAviao(dados, comunicacaoGeral->id_processo);
+			ReleaseMutex(dados->mutex_acede_avioes);
+			break;
 	}
 }
 
@@ -607,6 +664,7 @@ void InsereAviao(struct_dados* dados, int idProcesso, int capacidade, int veloci
 	dados->avioes[dados->n_avioes_atuais].lotacao = capacidade;
 	dados->avioes[dados->n_avioes_atuais].velocidade = velocidade;
 	dados->avioes[dados->n_avioes_atuais].nr_passageiros_atuais = 0;
+	dados->avioes[dados->n_avioes_atuais].tempo_inatividade = 0;
 
 	WaitForSingleObject(dados->mutex_acede_aeroportos, INFINITE);
 	dados->avioes[dados->n_avioes_atuais].pos_x = dados->aeroportos[indiceAeroporto].pos_x;

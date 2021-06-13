@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include "../Control/estruturas.h"
-#define NTHREADSPRINCIPAIS 2
+#define NTHREADSPRINCIPAIS 3
 #define NTHREADSMOVIMENTO 2
 #define MUTEX_MOVIMENTO_AVIOES _T("Mutex para a movimentacao dos avioes")
 #define MEMORIA_MOVIMENTO_AVIOES _T("Memoria para a movimentacao dos avioes")
@@ -58,8 +58,9 @@ typedef struct {
 //Declaracao de Funcoes e Threads
 DWORD WINAPI Principal(LPVOID param);
 DWORD WINAPI VerificaEncerramentoControl(LPVOID param);
+DWORD WINAPI Heartbeat(LPVOID param);
 DWORD WINAPI Movimento(LPVOID param);
-DWORD WINAPI OpcaoEncerrar(LPVOID param);
+DWORD WINAPI ObtemInputs(LPVOID param);
 BOOL MenuInicial(struct_util* util);
 BOOL MenuSecundario(struct_util* util);
 BOOL Registo(struct_util* util, int capacidade, int velocidade, TCHAR aeroportoInicial[]);
@@ -72,6 +73,7 @@ void AlteraPosicaoNaMemoria(struct_util* util, int novo_x, int novo_y);
 void EnviarNovasCoordenadasAoControl(struct_util* util, int novo_x, int novo_y);
 void AvisaControlDaChegada(struct_util* util);
 void AlteraMinhasInformacoes(struct_util* util);
+void EnviaHeartbeatAoControl(struct_util* util);
 
 int _tmain(int argc, TCHAR* argv[]) {
 
@@ -159,6 +161,11 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Verificação do Encerramento do Control!\n"));
 		return -1;
 	}
+	hthreadsPrincipais[2] = CreateThread(NULL, 0, Heartbeat, &util, 0, NULL);
+	if (hthreadsPrincipais[2] == NULL) {
+		_tprintf(_T("ERRO! Não foi possível criar a thread de Heartbeat!\n"));
+		return -1;
+	}
 
 	indiceThread = WaitForMultipleObjects(NTHREADSPRINCIPAIS, hthreadsPrincipais, FALSE, INFINITE);
 	
@@ -195,7 +202,7 @@ DWORD WINAPI Principal(LPVOID param) {
 		return -1;
 	}
 
-	hthreadsMovimento[0] = CreateThread(NULL, 0, OpcaoEncerrar, util, 0, NULL);
+	hthreadsMovimento[0] = CreateThread(NULL, 0, ObtemInputs, util, 0, NULL);
 	if (hthreadsMovimento[0] == NULL) {
 		_tprintf(_T("ERRO! Não foi possível criar a thread da Comunicação!\n"));
 		return -1;
@@ -292,7 +299,7 @@ DWORD WINAPI Movimento(LPVOID param) {
 	return 0;
 }
 
-DWORD WINAPI OpcaoEncerrar(LPVOID param) {
+DWORD WINAPI ObtemInputs(LPVOID param) {
 	TCHAR com_total[TAM];
 	com_total[0] = '\0';
 	struct_util* util = (struct_util*)param;
@@ -324,6 +331,31 @@ DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
 	}
 	WaitForSingleObject(eventoEncerraControl, INFINITE);
 	CloseHandle(eventoEncerraControl);
+	return 0;
+}
+
+DWORD WINAPI Heartbeat(LPVOID param) {
+	struct_util* util = (struct_util*)param;
+	LARGE_INTEGER tempo;
+	HANDLE waitable_timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	if (NULL == waitable_timer) {
+		_tprintf(_T("Erro ao criar o waitable timer!\n"));
+		return 1;
+	}
+
+	do {
+		tempo.QuadPart = -(20000000LL);
+
+		if (!SetWaitableTimer(waitable_timer, &tempo, 0, NULL, NULL, 0))
+		{
+			_tprintf(_T("Erro ao iniciar o waitable timer!\n"));
+			return 0;
+		}
+		WaitForSingleObject(waitable_timer, INFINITE);
+
+		EnviaHeartbeatAoControl(util);
+
+	} while (1);
 	return 0;
 }
 
@@ -717,6 +749,21 @@ void Encerra(struct_util* util) {
 	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
 
 	util->ptrMemoriaGeral->nrAvioes = --(util->ptrMemoriaGeral->nrAvioes);
+
+	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
+	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;
+
+	ReleaseMutex(util->mutexComunicacoesAvioes);
+	ReleaseSemaphore(util->semafEscritos, 1, NULL);
+}
+
+void EnviaHeartbeatAoControl(struct_util* util) {
+	struct_aviao_com comunicacaoGeral;
+	comunicacaoGeral.tipomsg = HEARTBEAT;
+	comunicacaoGeral.id_processo = util->eu.id_processo;
+
+	WaitForSingleObject(util->semafLidos, INFINITE);
+	WaitForSingleObject(util->mutexComunicacoesAvioes, INFINITE);
 
 	CopyMemory(&util->ptrMemoriaGeral->coms_controlador[util->ptrMemoriaGeral->in], &comunicacaoGeral, sizeof(struct_aviao_com));
 	util->ptrMemoriaGeral->in = (util->ptrMemoriaGeral->in + 1) % MAX_AVIOES;

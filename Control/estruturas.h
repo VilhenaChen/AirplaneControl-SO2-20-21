@@ -9,9 +9,10 @@
 //DEFINES TAMANHOS E MAXMOS
 #define TAM 200
 #define TAM_MAP 1000
+#define MAX_PASSAGEIROS 200
 #define MAX_AVIOES 10
 #define MAX_AEROPORTOS 10
-#define MAX_PASSAGEIROS 200
+#define MAX_INATIVIDADE 5
 
 //DEFINES PARA NOMES DE MUTEXES, SEMAFOROS, ETC.
 #define MEMORIA_CONTROL _T("Memoria Control")
@@ -33,6 +34,7 @@
 #define NOVAS_COORDENADAS 3
 #define CHEGADA_AO_DESTINO 4
 #define ENCERRAR_AVIAO 5
+#define HEARTBEAT 6
 
 //DEFINES PARA TIPOS DE MENSAGENS CONTROLADOR-AVIAO
 #define AVIAO_CONFIRMADO 1
@@ -56,6 +58,8 @@
 #define NOVA_COORDENADA 4
 #define AVIAO_DESPENHOU 5
 
+//Variaveis Globais
+
 
 typedef struct {
 	TCHAR nome[TAM];
@@ -71,6 +75,7 @@ typedef struct {
 	int velocidade;
 	int pos_x;
 	int pos_y;
+	int tempo_inatividade;
 	struct_aeroporto* origem;
 	struct_aeroporto* destino;
 } struct_aviao;
