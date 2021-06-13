@@ -51,6 +51,7 @@ typedef struct {
 	HMODULE hDLL;
 	struct_input input;
 	BOOL flagSair;
+	struct_aeroporto* destinoAnterior;
 } struct_util;
 
 
@@ -85,9 +86,13 @@ int _tmain(int argc, TCHAR* argv[]) {
 	HANDLE hthreadsPrincipais[NTHREADSPRINCIPAIS];
 	struct_aeroporto origem;
 	struct_aeroporto destino;
+	struct_aeroporto destinoAnterior;
 	struct_util util;
 	util.eu.origem = &origem;
 	util.eu.destino = &destino;
+	util.destinoAnterior = &destinoAnterior;
+
+
 	int indiceThread;
 
 	//Verificar se o Control já está a correr
@@ -113,14 +118,15 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! A velocidade do Avião tem de ser superior a 0!\n"));
 		return -1; // quit; mutex is released automatically
 	}
-
 	//Preencher informações do eu com o que foi passado
 	util.eu.id_processo = GetCurrentProcessId();
 	util.eu.lotacao = _tstoi(argv[1]);
 	util.eu.nr_passageiros_atuais = 0;
 	util.eu.velocidade = _tstoi(argv[2]);
 	_tcscpy_s(util.eu.origem->nome,_countof(util.eu.origem->nome), argv[3]);
-
+	_tcscpy_s(util.destinoAnterior->nome,_countof(util.destinoAnterior->nome), _T(""));
+	util.destinoAnterior->pos_x = -1;
+	util.destinoAnterior->pos_y = -1;
 	//Semáforo para verificar se o avião se pode registar
 	util.semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
 	if (util.semafAvioesAtuais == NULL) {
@@ -213,6 +219,10 @@ DWORD WINAPI Principal(LPVOID param) {
 		if (util->flagSair == TRUE) {
 			break;
 		}
+		_tprintf(_T("Nome Origem: %s\n"), util->eu.origem->nome);
+		_tprintf(_T("\tX: %d Y: %d\n"), util->eu.origem->pos_x, util->eu.origem->pos_y);
+		_tprintf(_T("Nome Destinos: %s\n"), util->eu.destino->nome);
+		_tprintf(_T("\tX: %d Y: %d\n"), util->eu.destino->pos_x, util->eu.destino->pos_y);
 		util->flagSair = MenuSecundario(util);
 		if (util->flagSair == TRUE) {
 			break;
@@ -426,6 +436,9 @@ void AlteraMinhasInformacoes(struct_util* util) {
 	util->eu.origem->pos_y = util->eu.destino->pos_y;
 	util->eu.pos_x = util->eu.origem->pos_x;
 	util->eu.pos_y = util->eu.origem->pos_y;
+	_tcscpy_s(util->destinoAnterior->nome, _countof(util->destinoAnterior->nome), util->eu.origem->nome);
+	util->destinoAnterior->pos_x = util->eu.origem->pos_x;
+	util->destinoAnterior->pos_y = util->eu.origem->pos_y;
 	_tcscpy_s(util->eu.destino->nome, _countof(util->eu.destino->nome), _T(""));
 	util->eu.destino->pos_x = -1;
 	util->eu.destino->pos_y = -1;
@@ -570,6 +583,7 @@ BOOL InicializaUtil(struct_util* util) {
 	_stprintf_s(mem_aviao, _countof(mem_aviao), MEMORIA_AVIAO, util->eu.id_processo);
 	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, util->eu.id_processo);
 
+
 	//util->encerraThread = FALSE;
 	//DLL
 	util->hDLL = LoadLibraryEx(_T("SO2_TP_DLL_2021.dll"), NULL, 0);
@@ -713,6 +727,10 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 	struct_aviao_com comunicacaoGeral;
 	struct_controlador_com comunicacaoParticular;
 
+	if (_tcscmp(util->eu.origem->nome, destino) == 0){
+		_tprintf(_T("Erro! O Destino não pode ser o mesmo que a Origem!\n"));
+		return FALSE;
+	}
 	comunicacaoGeral.tipomsg = NOVO_DESTINO;
 	comunicacaoGeral.id_processo = util->eu.id_processo;
 	_tcscpy_s(comunicacaoGeral.nome_destino, _countof(comunicacaoGeral.nome_destino), destino);
@@ -726,7 +744,7 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 		WaitForSingleObject(util->mutexAviao, INFINITE);
 		CopyMemory(&comunicacaoParticular, &util->ptrMemoriaParticular->resposta[0], sizeof(struct_controlador_com));
 		ReleaseMutex(util->mutexAviao);
-	} while (comunicacaoParticular.tipomsg != DESTINO_VERIFICADO && comunicacaoParticular.tipomsg != DESTINO_REJEITADO);
+	} while ((comunicacaoParticular.tipomsg != DESTINO_VERIFICADO && comunicacaoParticular.tipomsg != DESTINO_REJEITADO) || (comunicacaoParticular.x_destino == util->destinoAnterior->pos_x && comunicacaoParticular.y_destino == util->destinoAnterior->pos_y));
 
 	if (comunicacaoParticular.tipomsg == DESTINO_REJEITADO) {
 		_tprintf(_T("Erro! O destino inserido não é válido!\n"));
@@ -736,6 +754,7 @@ BOOL ProximoDestino(struct_util* util, TCHAR destino[]) {
 	_tcscpy_s(util->eu.destino->nome, _countof(util->eu.destino->nome), destino);
 	util->eu.destino->pos_x = comunicacaoParticular.x_destino;
 	util->eu.destino->pos_y = comunicacaoParticular.y_destino;
+
 	return TRUE;
 }
 //Funções Encerrar
