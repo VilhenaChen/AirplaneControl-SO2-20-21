@@ -534,6 +534,7 @@ void preencheInformacoesSemResposta(struct_dados* dados, struct_aviao_com* comun
 	case ENCERRAR_AVIAO:
 		WaitForSingleObject(dados->mutex_acede_avioes, INFINITE);
 		indiceAviao = getIndiceAviao(comunicacaoGeral->id_processo, dados);
+		_tprintf(_T("O Aviao %d (PID: %d) encerrou!"), indiceAviao, dados->avioes[indiceAviao].id_processo);
 		InformaAviaoDespenhado(dados, &dados->avioes[indiceAviao]);
 		EliminaAviao(dados, comunicacaoGeral->id_processo);
 		ReleaseMutex(dados->mutex_acede_avioes);

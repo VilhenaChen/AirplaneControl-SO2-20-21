@@ -64,13 +64,23 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("ERRO! Não foram passados os argumentos necessários ao lançamento do Passageiro!\n"));
 		return -1; // quit; mutex is released automatically
 	}
+	if (_tcscmp(argv[1], argv[2]) == 0) {
+		_tprintf(_T("ERRO! A Origem e o Destino não podem ser iguais!\n"));
+		return -1;
+	}
+	if (argc > 4 && argv[4] < 0) {
+		_tprintf(_T("ERRO! O tempo de espera não pode ser negativo!\n"));
+		return -1;
+	}
 	InicializaDados(&dados, &origem, &destino, &aviao);
 	_tcscpy_s(dados.eu.origem->nome, _countof(dados.eu.origem->nome), argv[1]);
 	_tcscpy_s(dados.eu.destino->nome, _countof(dados.eu.destino->nome), argv[2]);
 	_tcscpy_s(dados.eu.nome, _countof(dados.eu.nome), argv[3]);
-	if (argv[4] != NULL) {
+	if (argc>4) {
 		dados.eu.tempo_espera = _tstoi(argv[4]);
 	}
+
+	_tprintf(_T("Heloo: %d"), dados.eu.tempo_espera);
 
 	Registo(&dados);
 
@@ -153,7 +163,20 @@ DWORD WINAPI VerificaEncerramentoControl(LPVOID param) {
 DWORD WINAPI VerificaTempoEspera(LPVOID param) {
 	struct_dados* dados = (struct_dados*)param;
     LARGE_INTEGER tempo;
-    tempo.QuadPart = -((dados->eu.tempo_espera) * 10000000LL);
+
+	if (dados->eu.tempo_espera == -1) {
+		do {
+			Sleep(200);
+		} while (1);
+		return 0;
+	}
+
+	/*if (dados->eu.tempo_espera == -1) {
+		tempo.QuadPart = -100000000LL;
+	}
+	else {*/
+		tempo.QuadPart = -((dados->eu.tempo_espera) * 10000000LL);
+	//}
 
     if (!SetWaitableTimer(dados->waitable_timer, &tempo, 0, NULL, NULL, 0))
     {
@@ -161,9 +184,13 @@ DWORD WINAPI VerificaTempoEspera(LPVOID param) {
         return 0;
     }
 
+	//if (dados->eu.tempo_espera == -1) {
+		//CancelWaitableTimer(dados->waitable_timer);
+	//}
+	//else {
+		WaitForSingleObject(dados->waitable_timer, INFINITE);
+	//}
     // Wait for the timer.
-
-	WaitForSingleObject(dados->waitable_timer, INFINITE);
 
 	_tprintf(_T("O seu tempo de espera terminou!\n"));
 
@@ -324,6 +351,7 @@ void InicializaDados(struct_dados* dados, struct_aeroporto* origem, struct_aerop
 	dados->eu.origem = origem;
 	dados->eu.destino = destino;
 	dados->eu.aviao = aviao;
+	dados->eu.tempo_espera = -1;
 	_stprintf_s(nomePipe, _countof(nomePipe), PIPE_PASSAG_PARTICULAR, dados->eu.id_processo);
 	dados->hMeuPipe = CreateNamedPipe(nomePipe, PIPE_ACCESS_INBOUND, PIPE_WAIT | PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1,
 		sizeof(struct_msg_control_passageiro), sizeof(struct_msg_control_passageiro), 1000, NULL);
