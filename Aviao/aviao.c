@@ -11,7 +11,6 @@
 #define MEMORIA_MOVIMENTO_AVIOES _T("Memoria para a movimentacao dos avioes")
 #define MUTEX_INPUTS _T("Mutex dos Inputs")
 #define MUTEX_FLAG_SAIR _T("Mutex da flag de sair")
-//#define MUTEX_ENCERRAR_THREAD _T("Mutex para a flag de encerrar a thread")
 
 //Estrutura de mutexes, semaforos, etc para passar entre funções
 typedef struct {
@@ -127,6 +126,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 	_tcscpy_s(util.destinoAnterior->nome,_countof(util.destinoAnterior->nome), _T(""));
 	util.destinoAnterior->pos_x = -1;
 	util.destinoAnterior->pos_y = -1;
+
 	//Semáforo para verificar se o avião se pode registar
 	util.semafAvioesAtuais = CreateSemaphore(NULL, MAX_AVIOES, MAX_AVIOES, SEMAFORO_AVIOES_ATIVOS);
 	if (util.semafAvioesAtuais == NULL) {
@@ -583,8 +583,6 @@ BOOL InicializaUtil(struct_util* util) {
 	_stprintf_s(mem_aviao, _countof(mem_aviao), MEMORIA_AVIAO, util->eu.id_processo);
 	_stprintf_s(mutex_aviao, _countof(mutex_aviao), MUTEX_AVIAO, util->eu.id_processo);
 
-
-	//util->encerraThread = FALSE;
 	//DLL
 	util->hDLL = LoadLibraryEx(_T("SO2_TP_DLL_2021.dll"), NULL, 0);
 	if (util->hDLL != NULL) {
@@ -717,8 +715,6 @@ void FechaHandles(struct_util* util) {
 	CloseHandle(util->mutexInputs);
 	CloseHandle(util->input.eventoInput);
 	FreeLibrary(util->hDLL);
-	//CloseHandle(util->mutexEncerraThread);
-	
 }
 
 //Funcoes Destino
